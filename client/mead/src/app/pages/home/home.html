@@ -1,1 +1,18 @@
-<p>home works!</p>
+<div class="container">
+  <h1>HealthScope</h1>
+
+  <form class="row" (ngSubmit)="doSearch()">
+    <input name="q" [(ngModel)]="q" placeholder="Search (e.g., asthma)" autocomplete="off" />
+    <button type="submit">Search</button>
+  </form>
+
+  <p class="muted" *ngIf="loading">Loading...</p>
+  <p class="error" *ngIf="error">{{ error }}</p>
+
+  <ul class="list" *ngIf="results.length">
+    <li *ngFor="let item of results">
+      <a [routerLink]="['/condition', item.id]"><b>{{ item.label }}</b></a>
+      <div class="muted">{{ item.description }}</div>
+    </li>
+  </ul>
+</div>

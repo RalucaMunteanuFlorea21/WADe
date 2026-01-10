@@ -1,79 +1,93 @@
-import { Component } from '@angular/core';
+import { Component, ChangeDetectorRef, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
+import { FormsModule } from '@angular/forms';
 import { ConditionsApiService, ConditionDetails } from '../../services/conditions-api.service';
 
+type Tab = 'overview' | 'body' | 'geo';
+
 @Component({
-  selector: 'app-condition',
+  selector: 'app-conditions',
   standalone: true,
-  imports: [CommonModule],
-  template: `
-    <p *ngIf="loading">Loading...</p>
-    <p *ngIf="error" style="color:red">{{ error }}</p>
-
-    <ng-container *ngIf="data">
-      <h2>{{ data.name }}</h2>
-      <p style="opacity:.8">{{ data.description }}</p>
-
-      <div style="margin:12px 0;">
-        <button (click)="tab='overview'">Overview</button>
-        <button (click)="tab='body'">Body</button>
-        <button (click)="tab='geo'">Geography</button>
-      </div>
-
-      <div *ngIf="tab==='overview'">
-        <h3>Overview</h3>
-        <p style="white-space:pre-line">{{ data.sections.overview }}</p>
-
-        <h3>Symptoms</h3>
-        <ul><li *ngFor="let s of data.sections.symptoms">{{ s }}</li></ul>
-
-        <h3>Risk factors</h3>
-        <ul><li *ngFor="let r of data.sections.riskFactors">{{ r }}</li></ul>
-
-        <h3>Prevention</h3>
-        <ul><li *ngFor="let p of data.sections.prevention">{{ p }}</li></ul>
-
-        <h3>Sources</h3>
-        <ul>
-          <li *ngFor="let src of data.sources">
-            <a *ngIf="src.url" [href]="src.url" target="_blank">{{ src.name }}</a>
-            <span *ngIf="!src.url">{{ src.name }}</span>
-          </li>
-        </ul>
-      </div>
-
-      <div *ngIf="tab==='body'">
-        <h3>Affected systems</h3>
-        <ul><li *ngFor="let b of data.bodySystems">{{ b.label }}</li></ul>
-      </div>
-
-      <div *ngIf="tab==='geo'">
-        <h3>Geography (MVP)</h3>
-        <p>We’ll connect a map next. For now, we’ll show the backend geo response.</p>
-        <pre>{{ geo | json }}</pre>
-      </div>
-    </ng-container>
-  `,
+  imports: [CommonModule, RouterLink, FormsModule],
+  templateUrl: './condition.html',
 })
-export class Condition {
-  tab: 'overview' | 'body' | 'geo' = 'overview';
-  loading = true;
+export class Conditions implements OnInit {
+  id!: string;
+
+  tab: Tab = 'overview';
+
+  loadingCondition = true;
+  loadingGeo = false;
+
   error: string | null = null;
+  geoError: string | null = null;
 
   data: ConditionDetails | null = null;
   geo: any = null;
 
-  constructor(private route: ActivatedRoute, private api: ConditionsApiService) {
-    const id = this.route.snapshot.paramMap.get('id')!;
-    this.api.getCondition(id).subscribe({
+  country = 'RO';
+  countries = ['RO', 'FR', 'DE', 'GB', 'US'];
+
+  constructor(
+    private route: ActivatedRoute,
+    private api: ConditionsApiService,
+    private cdr: ChangeDetectorRef
+  ) {}
+
+  ngOnInit() {
+    this.id = this.route.snapshot.paramMap.get('id')!;
+    this.loadCondition();
+  }
+
+  setTab(t: Tab) {
+    this.tab = t;
+
+    if (t === 'geo' && !this.geo && !this.loadingGeo) {
+      this.loadGeo();
+    }
+  }
+
+  loadCondition() {
+    this.loadingCondition = true;
+    this.error = null;
+
+    this.api.getCondition(this.id).subscribe({
       next: (d) => {
         this.data = d;
-        this.loading = false;
-        // load geo in background for tab
-        this.api.getGeo(id, 'RO').subscribe({ next: (g) => (this.geo = g) });
+        this.loadingCondition = false;
+
+        // ✅ schedule update safely (prevents “update mode” assertion)
+        queueMicrotask(() => this.cdr.markForCheck());
       },
-      error: (e) => { this.error = e?.error?.message ?? 'Request failed'; this.loading = false; },
+      error: (e) => {
+        this.error = e?.error?.message ?? e?.message ?? 'Request failed';
+        this.loadingCondition = false;
+        queueMicrotask(() => this.cdr.markForCheck());
+      },
     });
+  }
+
+  loadGeo() {
+    this.loadingGeo = true;
+    this.geoError = null;
+
+    this.api.getGeo(this.id, this.country).subscribe({
+      next: (g) => {
+        this.geo = g;
+        this.loadingGeo = false;
+        queueMicrotask(() => this.cdr.markForCheck());
+      },
+      error: (e) => {
+        this.geoError = e?.error?.message ?? e?.message ?? 'Geo request failed';
+        this.loadingGeo = false;
+        queueMicrotask(() => this.cdr.markForCheck());
+      },
+    });
+  }
+
+  refreshGeo() {
+    this.geo = null;
+    this.loadGeo();
   }
 }

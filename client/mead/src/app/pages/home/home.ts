@@ -1,31 +1,14 @@
-import { Component } from '@angular/core';
+import { Component, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
-import { RouterModule } from '@angular/router';
+import { RouterLink } from '@angular/router';
 import { ConditionsApiService, ConditionSearchItem } from '../../services/conditions-api.service';
 
 @Component({
   selector: 'app-home',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule],
-  template: `
-    <h1>HealthScope</h1>
-
-    <input [(ngModel)]="q" placeholder="Search condition (e.g., asthma)" />
-    <button (click)="doSearch()">Search</button>
-
-    <p *ngIf="loading">Loading...</p>
-    <p *ngIf="error" style="color:red">{{ error }}</p>
-
-    <ul>
-      <li *ngFor="let item of results">
-        <a [routerLink]="['/condition', item.id]">
-          <b>{{ item.label }}</b>
-        </a>
-        <div style="opacity:.8">{{ item.description }}</div>
-      </li>
-    </ul>
-  `,
+  imports: [CommonModule, FormsModule, RouterLink],
+  templateUrl: './home.html',
 })
 export class Home {
   q = 'asthma';
@@ -33,14 +16,31 @@ export class Home {
   loading = false;
   error: string | null = null;
 
-  constructor(private api: ConditionsApiService) {}
+  constructor(private api: ConditionsApiService, private cdr: ChangeDetectorRef) {}
 
   doSearch() {
+    const query = this.q.trim();
+    if (query.length < 2) {
+      this.error = 'Type at least 2 characters.';
+      this.cdr.detectChanges();
+      return;
+    }
+
     this.loading = true;
     this.error = null;
-    this.api.search(this.q).subscribe({
-      next: (r) => { this.results = r; this.loading = false; },
-      error: (e) => { this.error = e?.error?.message ?? 'Request failed'; this.loading = false; },
+    this.cdr.detectChanges();
+
+    this.api.search(query).subscribe({
+      next: (r) => {
+        this.results = r ?? [];
+        this.loading = false;
+        this.cdr.detectChanges();
+      },
+      error: (e) => {
+        this.error = e?.error?.message ?? e?.message ?? 'Request failed';
+        this.loading = false;
+        this.cdr.detectChanges();
+      },
     });
   }
 }

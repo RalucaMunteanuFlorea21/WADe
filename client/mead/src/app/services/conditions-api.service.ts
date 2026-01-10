@@ -16,7 +16,7 @@ export interface ConditionDetails {
     overview: string | null;
     symptoms: string[];
     riskFactors: string[];
-    prevention: string[]; // might be empty
+    prevention: string[];
   };
   bodySystems: Array<{ id: string; label: string }>;
   sources: Array<{ name: string; url: string | null }>;
@@ -31,19 +31,21 @@ export class ConditionsApiService {
   search(q: string) {
     return this.http.get<ConditionSearchItem[]>(
       `${this.base}/api/conditions/search`,
-      { params: { q } }
+      { params: { q, _t: Date.now() } as any }
     );
   }
 
   getCondition(id: string) {
-    return this.http.get<ConditionDetails>(`${this.base}/api/conditions/${id}`);
-  }
-
-  getBody(id: string) {
-    return this.http.get<{ id: string; bodySystems: any[] }>(`${this.base}/api/conditions/${id}/body`);
+    return this.http.get<ConditionDetails>(
+      `${this.base}/api/conditions/${id}`,
+      { params: { _t: Date.now() } as any }
+    );
   }
 
   getGeo(id: string, country: string) {
-    return this.http.get(`${this.base}/api/conditions/${id}/geo`, { params: { country } });
+    return this.http.get<any>(
+      `${this.base}/api/conditions/${id}/geo`,
+      { params: { country, _t: Date.now() } as any }
+    );
   }
 }

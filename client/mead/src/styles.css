@@ -1,1 +1,12 @@
-/* You can add global styles to this file, and also import other style files */
+.container { max-width: 900px; margin: 24px auto; padding: 0 16px; font-family: system-ui, Arial, sans-serif; }
+.row { display: flex; gap: 8px; align-items: center; margin: 12px 0; }
+input, select { padding: 8px; font-size: 14px; }
+button { padding: 8px 12px; cursor: pointer; }
+.tabs { display: flex; gap: 8px; margin: 16px 0; }
+.tabs button.active { font-weight: 700; }
+.list { padding-left: 18px; }
+.muted { opacity: 0.75; }
+.error { color: #b00020; }
+.pre { white-space: pre-line; }
+.small { font-size: 12px; }
+.back { display: inline-block; margin-bottom: 12px; }

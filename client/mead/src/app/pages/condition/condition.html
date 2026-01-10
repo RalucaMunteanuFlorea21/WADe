@@ -1,1 +1,90 @@
-<p>condition works!</p>
+<div class="container">
+  <a class="back" routerLink="/">&larr; Back</a>
+
+  <p class="muted" *ngIf="loadingCondition">Loading condition...</p>
+  <p class="error" *ngIf="error">{{ error }}</p>
+
+  <ng-container *ngIf="data">
+    <h2>{{ data.name }}</h2>
+    <p class="muted">{{ data.description }}</p>
+
+    <div class="tabs">
+      <button type="button" [class.active]="tab==='overview'" (click)="setTab('overview')">Overview</button>
+      <button type="button" [class.active]="tab==='body'" (click)="setTab('body')">Body</button>
+      <button type="button" [class.active]="tab==='geo'" (click)="setTab('geo')">Geography</button>
+    </div>
+
+    <!-- OVERVIEW -->
+    <section *ngIf="tab==='overview'">
+      <h3>Overview</h3>
+      <p class="pre">{{ data.sections.overview || 'No overview available yet.' }}</p>
+
+      <h3>Symptoms</h3>
+      <ul class="list">
+        <li *ngFor="let s of data.sections.symptoms">{{ s }}</li>
+        <li *ngIf="!data.sections.symptoms?.length" class="muted">No symptoms found.</li>
+      </ul>
+
+      <h3>Risk factors</h3>
+      <ul class="list">
+        <li *ngFor="let r of data.sections.riskFactors">{{ r }}</li>
+        <li *ngIf="!data.sections.riskFactors?.length" class="muted">No risk factors found.</li>
+      </ul>
+
+      <h3>Prevention</h3>
+      <ul class="list">
+        <li *ngFor="let p of data.sections.prevention">{{ p }}</li>
+        <li *ngIf="!data.sections.prevention?.length" class="muted">No prevention info found.</li>
+      </ul>
+
+      <h3>Sources</h3>
+      <ul class="list">
+        <li *ngFor="let src of data.sources">
+          <a *ngIf="src.url" [href]="src.url" target="_blank" rel="noreferrer">{{ src.name }}</a>
+          <span *ngIf="!src.url">{{ src.name }}</span>
+        </li>
+      </ul>
+
+      <p class="muted small">Educational only — not medical advice.</p>
+    </section>
+
+    <!-- BODY -->
+    <section *ngIf="tab==='body'">
+      <h3>Affected systems</h3>
+      <ul class="list">
+        <li *ngFor="let b of data.bodySystems">{{ b.label }}</li>
+        <li *ngIf="!data.bodySystems?.length" class="muted">No body systems found.</li>
+      </ul>
+    </section>
+
+    <!-- GEO -->
+    <section *ngIf="tab==='geo'">
+      <h3>Geography</h3>
+
+      <div class="row">
+        <label for="country">Country:</label>
+        <select id="country" name="country" [(ngModel)]="country">
+          <option *ngFor="let c of countries" [value]="c">{{ c }}</option>
+        </select>
+        <button type="button" (click)="refreshGeo()">Load</button>
+      </div>
+
+      <p class="muted" *ngIf="loadingGeo">Loading geo...</p>
+      <p class="error" *ngIf="geoError">{{ geoError }}</p>
+
+      <div *ngIf="geo">
+        <p><b>{{ geo.valueLabel }}</b> ({{ geo.country }})</p>
+        <ul class="list">
+          <li *ngFor="let f of geo.factors">{{ f }}</li>
+        </ul>
+
+        <details>
+          <summary>Raw response</summary>
+          <pre>{{ geo | json }}</pre>
+        </details>
+      </div>
+
+      <p class="muted small">Factors are proxies (possible influences), not a diagnosis.</p>
+    </section>
+  </ng-container>
+</div>
