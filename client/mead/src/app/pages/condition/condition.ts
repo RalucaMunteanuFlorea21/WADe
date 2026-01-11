@@ -3,13 +3,27 @@ import { CommonModule } from '@angular/common';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { ConditionsApiService, ConditionDetails } from '../../services/conditions-api.service';
+import { ConditionStatsComponent } from '../../components/condition-stats';
+import { BodyVisualizationComponent } from '../../components/body-visualization';
+import { GeoHeatmapComponent } from '../../components/geo-heatmap';
+import { DataVisualizationComponent } from '../../components/data-visualization';
+import { LearningQuizComponent } from '../../components/learning-quiz';
 
-type Tab = 'overview' | 'body' | 'geo';
+type Tab = 'overview' | 'body' | 'geo' | 'visualizations';
 
 @Component({
   selector: 'app-conditions',
   standalone: true,
-  imports: [CommonModule, RouterLink, FormsModule],
+  imports: [
+    CommonModule, 
+    RouterLink, 
+    FormsModule,
+    ConditionStatsComponent,
+    BodyVisualizationComponent,
+    GeoHeatmapComponent,
+    DataVisualizationComponent,
+    LearningQuizComponent
+  ],
   templateUrl: './condition.html',
 })
 export class Conditions implements OnInit {
@@ -89,5 +103,10 @@ export class Conditions implements OnInit {
   refreshGeo() {
     this.geo = null;
     this.loadGeo();
+  }
+
+  // Expose a template-safe array of affected system labels
+  get affectedSystems(): string[] {
+    return this.data?.bodySystems?.map(b => b.label) ?? [];
   }
 }

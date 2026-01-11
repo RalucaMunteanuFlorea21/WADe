@@ -1,90 +1,211 @@
 <div class="container">
-  <a class="back" routerLink="/">&larr; Back</a>
+  <a class="back" routerLink="/">
+    <span>←</span> Back
+  </a>
 
-  <p class="muted" *ngIf="loadingCondition">Loading condition...</p>
-  <p class="error" *ngIf="error">{{ error }}</p>
+  <!-- Loading state -->
+  <div *ngIf="loadingCondition" class="loading-skeleton">
+    <div class="skeleton skeleton-title"></div>
+    <div class="skeleton skeleton-text"></div>
+    <div class="skeleton skeleton-text" [style.width]="'80%'"></div>
+    <div style="margin-top: 24px;">
+      <div class="skeleton skeleton-text"></div>
+      <div class="skeleton skeleton-text"></div>
+      <div class="skeleton skeleton-text" [style.width]="'70%'"></div>
+    </div>
+  </div>
 
-  <ng-container *ngIf="data">
+  <div *ngIf="error" class="error">
+    {{ error }}
+  </div>
+
+  <ng-container *ngIf="data && !loadingCondition">
     <h2>{{ data.name }}</h2>
     <p class="muted">{{ data.description }}</p>
 
     <div class="tabs">
-      <button type="button" [class.active]="tab==='overview'" (click)="setTab('overview')">Overview</button>
-      <button type="button" [class.active]="tab==='body'" (click)="setTab('body')">Body</button>
-      <button type="button" [class.active]="tab==='geo'" (click)="setTab('geo')">Geography</button>
+      <button 
+        type="button" 
+        [class.active]="tab==='overview'" 
+        (click)="setTab('overview')"
+      >
+        Overview
+      </button>
+      <button 
+        type="button" 
+        [class.active]="tab==='body'" 
+        (click)="setTab('body')"
+      >
+        Body Systems
+      </button>
+      <button 
+        type="button" 
+        [class.active]="tab==='visualizations'" 
+        (click)="setTab('visualizations')"
+      >
+        📊 Data & Maps
+      </button>
+      <button 
+        type="button" 
+        [class.active]="tab==='geo'" 
+        (click)="setTab('geo')"
+      >
+        Geography
+      </button>
     </div>
 
-    <!-- OVERVIEW -->
+    <!-- OVERVIEW TAB -->
     <section *ngIf="tab==='overview'">
       <h3>Overview</h3>
-      <p class="pre">{{ data.sections.overview || 'No overview available yet.' }}</p>
+
+      <!-- Stats Cards -->
+      <app-condition-stats *ngIf="data" [data]="data"></app-condition-stats>
+
+      <div class="overview-box">
+        <p class="pre" *ngIf="data.sections.overview">{{ data.sections.overview }}</p>
+        <p class="muted" *ngIf="!data.sections.overview">No overview available yet.</p>
+      </div>
 
       <h3>Symptoms</h3>
-      <ul class="list">
-        <li *ngFor="let s of data.sections.symptoms">{{ s }}</li>
-        <li *ngIf="!data.sections.symptoms?.length" class="muted">No symptoms found.</li>
-      </ul>
+      <div *ngIf="data.sections.symptoms?.length">
+        <ul class="list">
+          <li *ngFor="let s of data.sections.symptoms">
+            <span class="badge">{{ s }}</span>
+          </li>
+        </ul>
+      </div>
+      <p class="muted" *ngIf="!data.sections.symptoms?.length">No symptoms found.</p>
 
-      <h3>Risk factors</h3>
-      <ul class="list">
-        <li *ngFor="let r of data.sections.riskFactors">{{ r }}</li>
-        <li *ngIf="!data.sections.riskFactors?.length" class="muted">No risk factors found.</li>
-      </ul>
+      <h3>Risk Factors</h3>
+      <div *ngIf="data.sections.riskFactors?.length">
+        <ul class="list">
+          <li *ngFor="let r of data.sections.riskFactors">
+            <span class="badge badge-warning">{{ r }}</span>
+          </li>
+        </ul>
+      </div>
+      <p class="muted" *ngIf="!data.sections.riskFactors?.length">No risk factors found.</p>
 
       <h3>Prevention</h3>
-      <ul class="list">
-        <li *ngFor="let p of data.sections.prevention">{{ p }}</li>
-        <li *ngIf="!data.sections.prevention?.length" class="muted">No prevention info found.</li>
-      </ul>
+      <div *ngIf="data.sections.prevention?.length">
+        <ul class="list">
+          <li *ngFor="let p of data.sections.prevention">{{ p }}</li>
+        </ul>
+      </div>
+      <p class="muted" *ngIf="!data.sections.prevention?.length">No prevention info found.</p>
 
       <h3>Sources</h3>
       <ul class="list">
         <li *ngFor="let src of data.sources">
-          <a *ngIf="src.url" [href]="src.url" target="_blank" rel="noreferrer">{{ src.name }}</a>
+          <a *ngIf="src.url" [href]="src.url" target="_blank" rel="noreferrer" class="source-link">
+            {{ src.name }} <span style="font-size: 12px;">↗</span>
+          </a>
           <span *ngIf="!src.url">{{ src.name }}</span>
         </li>
       </ul>
 
-      <p class="muted small">Educational only — not medical advice.</p>
+      <p class="muted small" style="margin-top: 32px; padding: 16px; background: rgba(37, 99, 235, 0.05); border-radius: 8px; border-left: 4px solid var(--primary);">
+        ⓘ Educational only — not medical advice. Always consult qualified healthcare professionals.
+      </p>
+
+      <!-- Learning Quiz -->
+      <app-learning-quiz [conditionName]="data?.name || ''"></app-learning-quiz>
     </section>
 
-    <!-- BODY -->
+    <!-- BODY SYSTEMS TAB -->
     <section *ngIf="tab==='body'">
-      <h3>Affected systems</h3>
-      <ul class="list">
-        <li *ngFor="let b of data.bodySystems">{{ b.label }}</li>
-        <li *ngIf="!data.bodySystems?.length" class="muted">No body systems found.</li>
-      </ul>
+      <h3>Affected Body Systems</h3>
+      
+      <!-- Body Visualization Component -->
+      <app-body-visualization 
+        *ngIf="data && data.bodySystems" 
+        [affectedSystems]="affectedSystems"
+      ></app-body-visualization>
+
+      <div *ngIf="data.bodySystems?.length" style="margin-top: 24px;">
+        <h4>Details</h4>
+        <ul class="list">
+          <li *ngFor="let b of data.bodySystems">
+            <span class="badge badge-info">{{ b.label }}</span>
+          </li>
+        </ul>
+      </div>
+      <p class="muted" *ngIf="!data.bodySystems?.length">No specific body systems data available.</p>
     </section>
 
-    <!-- GEO -->
-    <section *ngIf="tab==='geo'">
-      <h3>Geography</h3>
+    <!-- VISUALIZATIONS TAB -->
+    <section *ngIf="tab==='visualizations'">
+      <h3>📊 Data Visualizations & Maps</h3>
+      
+      <!-- Data Visualization Charts -->
+      <app-data-visualization
+        *ngIf="data"
+        [symptoms]="data.sections.symptoms || []"
+        [riskFactors]="data.sections.riskFactors || []"
+      ></app-data-visualization>
 
-      <div class="row">
-        <label for="country">Country:</label>
-        <select id="country" name="country" [(ngModel)]="country">
-          <option *ngFor="let c of countries" [value]="c">{{ c }}</option>
-        </select>
-        <button type="button" (click)="refreshGeo()">Load</button>
+      <!-- Geo Heatmap Component -->
+      <h4 style="margin-top: 32px;">Geographic Distribution</h4>
+      <app-geo-heatmap 
+        *ngIf="data" 
+        [conditionName]="data?.name || ''"
+      ></app-geo-heatmap>
+
+      <p class="muted small" style="margin-top: 32px; padding: 16px; background: rgba(37, 99, 235, 0.05); border-radius: 8px; border-left: 4px solid var(--accent);">
+        ⓘ These visualizations are educational representations. Actual disease prevalence varies based on multiple factors including healthcare infrastructure, climate, population density, and genetic factors.
+      </p>
+    </section>
+
+    <!-- GEOGRAPHY TAB -->
+    <section *ngIf="tab==='geo'">
+      <h3>Geographic Context</h3>
+
+      <div class="geo-controls">
+        <div class="row">
+          <label for="country">Select Country:</label>
+          <select id="country" name="country" [(ngModel)]="country" [disabled]="loadingGeo">
+            <option *ngFor="let c of countries" [value]="c">{{ c }}</option>
+          </select>
+          <button type="button" (click)="refreshGeo()" [disabled]="loadingGeo">
+            <span *ngIf="!loadingGeo">Load Data</span>
+            <span *ngIf="loadingGeo">
+              <span class="spinner"></span>
+              Loading...
+            </span>
+          </button>
+        </div>
       </div>
 
-      <p class="muted" *ngIf="loadingGeo">Loading geo...</p>
-      <p class="error" *ngIf="geoError">{{ geoError }}</p>
+      <div *ngIf="geoError" class="error">
+        {{ geoError }}
+      </div>
 
-      <div *ngIf="geo">
-        <p><b>{{ geo.valueLabel }}</b> ({{ geo.country }})</p>
+      <div *ngIf="geo && !loadingGeo" class="geo-data" style="animation: slideInUp 0.4s ease-out;">
+        <div class="geo-value">
+          <p><b>{{ geo.valueLabel }}</b></p>
+          <p class="muted">Region: {{ geo.country }}</p>
+        </div>
+
+        <h4>Contributing Factors</h4>
         <ul class="list">
-          <li *ngFor="let f of geo.factors">{{ f }}</li>
+          <li *ngFor="let f of geo.factors">
+            <span class="factor-badge">{{ f }}</span>
+          </li>
         </ul>
 
         <details>
-          <summary>Raw response</summary>
+          <summary>View Raw Data</summary>
           <pre>{{ geo | json }}</pre>
         </details>
       </div>
 
-      <p class="muted small">Factors are proxies (possible influences), not a diagnosis.</p>
+      <p class="muted small" *ngIf="!geo && !loadingGeo" style="margin-top: 16px;">
+        Select a country and click "Load Data" to see geographic context
+      </p>
+
+      <p class="muted small" style="margin-top: 32px; padding: 16px; background: rgba(37, 99, 235, 0.05); border-radius: 8px; border-left: 4px solid var(--accent);">
+        ⓘ Factors are educational proxies showing possible influences (climate, population density, industrial exposure), not diagnostic or predictive.
+      </p>
     </section>
   </ng-container>
 </div>

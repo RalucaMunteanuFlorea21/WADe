@@ -1,18 +1,51 @@
 <div class="container">
   <h1>HealthScope</h1>
+  <p class="muted" style="margin-bottom: 32px;">Explore medical conditions, symptoms, and geographical health factors</p>
 
   <form class="row" (ngSubmit)="doSearch()">
-    <input name="q" [(ngModel)]="q" placeholder="Search (e.g., asthma)" autocomplete="off" />
-    <button type="submit">Search</button>
+    <input 
+      name="q" 
+      [(ngModel)]="q" 
+      placeholder="Search (e.g., asthma, hypertension, diabetes)" 
+      autocomplete="off"
+      [disabled]="loading"
+    />
+    <button type="submit" [disabled]="loading">
+      <span *ngIf="!loading">Search</span>
+      <span *ngIf="loading">
+        <span class="spinner"></span>
+        Searching...
+      </span>
+    </button>
   </form>
 
-  <p class="muted" *ngIf="loading">Loading...</p>
-  <p class="error" *ngIf="error">{{ error }}</p>
+  <div *ngIf="error" class="error">
+    {{ error }}
+  </div>
 
-  <ul class="list" *ngIf="results.length">
-    <li *ngFor="let item of results">
-      <a [routerLink]="['/condition', item.id]"><b>{{ item.label }}</b></a>
-      <div class="muted">{{ item.description }}</div>
-    </li>
-  </ul>
+  <!-- Results with fade-in animation -->
+  <div *ngIf="results.length && !loading" style="animation: fadeIn 0.4s ease-out;">
+    <p class="muted" style="font-size: 14px; margin-bottom: 16px;">
+      Found {{ results.length }} result<span *ngIf="results.length !== 1">s</span>
+    </p>
+    <ul class="list">
+      <li *ngFor="let item of results; let i = index" [style.animation-delay]="(i * 50) + 'ms'">
+        <a [routerLink]="['/condition', item.id]" class="search-result">
+          <b>{{ item.label }}</b>
+        </a>
+        <div class="muted" *ngIf="item.description">{{ item.description }}</div>
+      </li>
+    </ul>
+  </div>
+
+  <!-- Empty state -->
+  <div *ngIf="!results.length && !loading && q.length >= 2" style="text-align: center; margin-top: 48px; animation: fadeIn 0.4s ease-out;">
+    <p class="muted">No results found for "{{ q }}"</p>
+    <p class="muted small">Try a different search term</p>
+  </div>
+
+  <!-- Initial state hint -->
+  <div *ngIf="!results.length && !loading && q.length < 2" style="text-align: center; margin-top: 48px; opacity: 0.5;">
+    <p class="muted">Start typing to search for conditions</p>
+  </div>
 </div>
