@@ -1,9 +1,10 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { WikidataService, WikidataConditionDetails } from '../sources/wikidata/wikidata.service';
-import { DbpediaService } from '../sources/dbpedia/dbpedia.service';
-import { WikidocService } from '../sources/wikidoc/wikidoc.service';
+import { DbpediaService, DbpediaAbstract } from '../sources/dbpedia/dbpedia.service';
+import { WikidocService, WikidocPage } from '../sources/wikidoc/wikidoc.service';
+import { logger } from '../utils/log'; // adjust path if yours differs
 
-
+const WD_ID_RE = /^Q\d+$/;
 
 @Injectable()
 export class ConditionsService {
@@ -14,73 +15,131 @@ export class ConditionsService {
   ) {}
 
   async search(q: string) {
-    if (!q || q.trim().length < 2) {
+    const query = (q ?? '').trim();
+    if (query.length < 2) {
       throw new BadRequestException('Query must be at least 2 characters.');
     }
-    // Step 3 will implement real search.
-    return this.wikidata.searchCondition(q.trim());
+    return this.wikidata.searchCondition(query);
   }
 
   async getCondition(id: string) {
-    // Step 3 will implement real aggregation/normalization.
-    const wd = await this.wikidata.getConditionDetails(id);
-
-    // Optional secondary source (don’t fail if DBpedia is down)
-    let dbp: any = null;
-    try {
-      dbp = await this.dbpedia.getAbstractByWikidataId(id);
-    } catch {
-      dbp = null;
+    const qid = (id ?? '').trim();
+    if (!WD_ID_RE.test(qid)) {
+      throw new BadRequestException('Invalid id. Expected something like Q35869.');
     }
 
-    // WikiDoc narrative (best effort)
-    let doc: any = null;
-    try {
-      doc = await this.wikidoc.getConditionPage(wd?.name);
-    } catch {
-      doc = null;
-    }
+    const wd: WikidataConditionDetails = await this.wikidata.getConditionDetails(qid);
 
-    return {
-      id,
-      name: wd?.name ?? id,
+    // If name is missing or looks like a Q-id, don’t send it to WikiDoc.
+    const docName =
+      wd?.name && typeof wd.name === 'string' && !WD_ID_RE.test(wd.name) ? wd.name : null;
+
+    // Fetch optional sources in parallel; never fail the endpoint if they fail.
+    const [dbp, doc] = await Promise.all([
+      this.safeDbpedia(qid),
+      this.safeWikidoc(docName),
+    ]);
+
+    // Build overview from best available narrative source.
+    const overview = (doc?.overview && doc.overview.trim().length ? doc.overview : null)
+      ?? (dbp?.abstract && dbp.abstract.trim().length ? dbp.abstract : null)
+      ?? null;
+
+    const symptoms = [
+      ...(Array.isArray(wd?.symptoms) ? wd.symptoms : []),
+      ...(Array.isArray(doc?.symptoms) && doc.symptoms.length ? doc.symptoms : []),
+    ].slice(0, 20); // limit to 20 unique items
+
+    const riskFactors = [
+      ...(Array.isArray(wd?.riskFactors) ? wd.riskFactors : []),
+      ...(Array.isArray(doc?.riskFactors) && doc.riskFactors.length ? doc.riskFactors : []),
+    ].slice(0, 20);
+
+    const prevention = Array.isArray(doc?.prevention) ? doc!.prevention : [];
+
+    const out = {
+      id: qid,
+      name: wd?.name ?? qid,
       description: wd?.description ?? null,
       sections: {
-        overview: doc?.overview ?? dbp?.abstract ?? null,
-        symptoms: wd?.symptoms ?? [],
-        riskFactors: wd?.riskFactors ?? [],
-        prevention: doc?.prevention ?? [],
+        overview,
+        symptoms,
+        riskFactors,
+        prevention,
       },
-      bodySystems: wd?.bodySystems ?? [],
+      bodySystems: Array.isArray(wd?.bodySystems) ? wd.bodySystems : [],
       sources: [
-        { name: 'Wikidata', url: `https://www.wikidata.org/wiki/${id}` },
-        ...(doc?.url ? [{ name: 'WikiDoc', url: doc.url }] : []),
-        ...(dbp?.url ? [{ name: 'DBpedia', url: dbp.url }] : []),
-      ],
+        { name: 'Wikidata', url: `https://www.wikidata.org/wiki/${qid}` },
+        { name: 'WikiDoc', url: doc?.url ?? null },
+        { name: 'DBpedia', url: dbp?.url ?? null },
+      ].filter(s => !!s.url),
     };
+
+    // Lightweight log (shape only)
+    logger('[Conditions] getCondition', {
+      id: qid,
+      hasName: !!wd?.name,
+      hasDescription: !!wd?.description,
+      overviewSource: doc?.overview ? 'wikidoc' : dbp?.abstract ? 'dbpedia' : 'none',
+      symptoms: symptoms.length,
+      riskFactors: riskFactors.length,
+      prevention: out.sections.prevention.length,
+      bodySystems: out.bodySystems.length,
+    });
+
+    return out;
   }
 
   async getBodyImpact(id: string) {
-    // Step 3: comes from Wikidata + your mapping.
-    const wd = await this.wikidata.getConditionDetails(id);
+    const qid = (id ?? '').trim();
+    if (!WD_ID_RE.test(qid)) {
+      throw new BadRequestException('Invalid id. Expected something like Q35869.');
+    }
+
+    const wd = await this.wikidata.getConditionDetails(qid);
     return {
-      id,
-      bodySystems: wd?.bodySystems ?? [],
+      id: qid,
+      bodySystems: Array.isArray(wd?.bodySystems) ? wd.bodySystems : [],
     };
   }
 
   async getGeoContext(id: string, country: string) {
-    if (!country) throw new BadRequestException('country is required, e.g. RO');
+    const qid = (id ?? '').trim();
+    if (!WD_ID_RE.test(qid)) {
+      throw new BadRequestException('Invalid id. Expected something like Q35869.');
+    }
 
-    // For MVP (Step 7 gets better): return proxies/factors per country + condition
-    // Keep it simple now: just placeholders.
+    const c = (country ?? '').trim().toUpperCase();
+    if (!c) throw new BadRequestException('country is required, e.g. RO');
+
+    // MVP proxy response (stable shape)
     return {
-      id,
-      country: country.toUpperCase(),
+      id: qid,
+      country: c,
       value: 0.6,
       valueLabel: 'Estimated risk context (proxy)',
       factors: ['Climate', 'Population density', 'Industrial exposure', 'Lifestyle/diet'],
       sources: [{ name: 'Educational proxy', url: null }],
     };
+  }
+
+  // ---- helpers ----
+
+  private async safeDbpedia(id: string): Promise<DbpediaAbstract | null> {
+    try {
+      return await this.dbpedia.getAbstractByWikidataId(id);
+    } catch (e) {
+      logger('[Conditions] DBpedia failed', { id, error: String(e) });
+      return null;
+    }
+  }
+
+  private async safeWikidoc(conditionName: string | null): Promise<WikidocPage | null> {
+    try {
+      return await this.wikidoc.getConditionPage(conditionName);
+    } catch (e) {
+      logger('[Conditions] WikiDoc failed', { name: conditionName, error: String(e) });
+      return null;
+    }
   }
 }

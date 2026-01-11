@@ -11,7 +11,7 @@ import { ConditionsApiService, ConditionSearchItem } from '../../services/condit
   templateUrl: './home.html',
 })
 export class Home {
-  q = 'asthma';
+  q = 'hypertension';
   results: ConditionSearchItem[] = [];
   loading = false;
   error: string | null = null;
