@@ -1,0 +1,817 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>HealthScope — WADe Scholarly HTML Technical Report</title>
+
+  <!-- Lightweight Scholarly HTML-ish styling (print-friendly) -->
+  <style>
+    :root {
+      --text: #111;
+      --muted: #444;
+      --line: #ddd;
+      --soft: #f6f6f6;
+      --note: #fff8cc;
+      --note-line: #ffe08a;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      --sans: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
+    }
+    body { font-family: var(--sans); color: var(--text); line-height: 1.55; margin: 0; }
+    main { max-width: 980px; margin: 0 auto; padding: 34px 20px; }
+    header { border-bottom: 1px solid var(--line); padding-bottom: 16px; margin-bottom: 24px; }
+    h1 { margin: 0 0 8px 0; font-size: 2.05rem; }
+    h2 { margin-top: 34px; border-top: 1px solid #eee; padding-top: 16px; font-size: 1.55rem; }
+    h3 { margin-top: 20px; font-size: 1.2rem; }
+    h4 { margin-top: 14px; font-size: 1.05rem; }
+    p { margin: 10px 0; }
+    .meta { color: var(--muted); }
+    .meta div { margin: 2px 0; }
+    .chips { margin-top: 10px; display: flex; gap: 8px; flex-wrap: wrap; }
+    .chip { font-size: 0.85rem; border: 1px solid var(--line); padding: 3px 10px; border-radius: 999px; background: #fff; }
+    code, pre { background: var(--soft); border: 1px solid #eee; border-radius: 10px; }
+    code { padding: 2px 6px; font-family: var(--mono); font-size: 0.95em; }
+    pre { padding: 12px; overflow: auto; font-family: var(--mono); font-size: 0.92em; }
+    figure { margin: 16px 0; padding: 12px; border: 1px dashed var(--line); border-radius: 12px; background: #fff; }
+    figcaption { font-size: 0.95rem; color: var(--muted); margin-top: 8px; }
+    .todo { background: var(--note); border: 1px solid var(--note-line); padding: 10px 12px; border-radius: 10px; }
+    .small { font-size: 0.95rem; color: var(--muted); }
+    .kpi { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 12px 0; }
+    .kpi > div { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; background: #fff; }
+    ul, ol { margin: 8px 0 8px 22px; }
+    li { margin: 6px 0; }
+    table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 0.95rem; }
+    th, td { border: 1px solid var(--line); padding: 8px 10px; vertical-align: top; }
+    th { background: #fafafa; text-align: left; }
+    a { color: inherit; }
+    .pagebreak { page-break-before: always; }
+    @media print {
+      main { padding: 0; }
+      a { text-decoration: none; }
+      figure { break-inside: avoid; }
+      pre { break-inside: avoid; }
+    }
+  </style>
+</head>
+
+<body>
+<main>
+  <header>
+    <h1>HealthScope — WADe Scholarly HTML Technical Report</h1>
+    <div class="meta">
+      <div><strong>Course:</strong> WADe (Web Application Development)</div>
+      <div><strong>Solution:</strong> HealthScope — condition exploration via Linked Data sources</div>
+      <div><strong>Stack:</strong> Angular (SPA) + NestJS (REST API) + Wikidata/WikiDoc/DBpedia (external knowledge)</div>
+      <div><strong>Repository:</strong> WADe</div>
+      <div><strong>Date:</strong> 2026-01-12</div>
+    </div>
+    <div class="chips" aria-label="tags">
+      <span class="chip">project</span>
+      <span class="chip">infoiasi</span>
+      <span class="chip">wade</span>
+      <span class="chip">web</span>
+    </div>
+  </header>
+
+  <section id="abstract">
+    <h2>Abstract</h2>
+    <p>
+      HealthScope is a Web Application Development (WADe) project that supports exploration of medical conditions using
+      Linked Data and open knowledge sources. The system provides an Angular single-page application (SPA) that allows
+      users to search for a condition and open a details page containing a normalized summary. A NestJS backend exposes
+      a REST API that aggregates information from external knowledge bases (Wikidata, WikiDoc, and optionally DBpedia),
+      unifies identifiers via Wikidata Q-IDs, and returns a stable JSON schema suitable for a client UI.
+    </p>
+    <p>
+      This report documents: (i) the internal data structures and normalization rules used by the application, (ii) the
+      API design and key technical decisions for robust aggregation, (iii) the linked data principles followed by the
+      solution, and (iv) pragmatic use of external RDF-based sources, including SPARQL queries and identifier bridging.
+      The report is intended to be read as a “scholarly HTML” artifact and to serve as technical documentation for both
+      implementation and evaluation.
+    </p>
+  </section>
+
+  <section id="intro">
+    <h2>1. Introduction</h2>
+    <p>
+      Modern health information is widely distributed across heterogeneous resources: encyclopedic datasets, clinical
+      documentation pages, and structured knowledge graphs. While these sources contain valuable facts and narratives,
+      their content is often fragmented: one source may provide identifiers and taxonomy, another offers a descriptive
+      abstract, and a third contains educational sections such as prevention advice. HealthScope addresses this challenge
+      by implementing a lightweight, service-oriented web system that aggregates multiple sources into a unified model
+      for end users.
+    </p>
+    <p>
+      The project objective is not to replace clinical decision-making, but to demonstrate practical skills in web
+      development and linked data usage: consuming SPARQL endpoints, bridging identifiers, normalizing schemas, and
+      presenting results in a web interface. The system therefore emphasizes transparency: every output includes source
+      links, and missing information is handled gracefully rather than being silently fabricated.
+    </p>
+    <p>
+      Target users include students and general users who want quick, structured exploration of a condition (overview,
+      prevention, associated factors). The solution is designed to remain usable under partial data coverage, which is a
+      typical reality when integrating open knowledge bases.
+    </p>
+
+    <div class="kpi" role="group" aria-label="project properties">
+      <div>
+        <strong>Primary Identifier</strong>
+        <div class="small">Wikidata Q-ID (stable key across services)</div>
+      </div>
+      <div>
+        <strong>API Style</strong>
+        <div class="small">REST (JSON responses, stable schema)</div>
+      </div>
+      <div>
+        <strong>Data Sources</strong>
+        <div class="small">Wikidata + WikiDoc + optional DBpedia enrichment</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="system-overview">
+    <h2>2. System Overview</h2>
+
+    <h3>2.1 High-Level Architecture</h3>
+    <p>
+      HealthScope follows a service-oriented architecture with a clear boundary between client and server:
+      the Angular SPA is responsible for user interaction, routing, and rendering; the NestJS backend provides a REST API
+      that performs aggregation, caching, data normalization, and resilience handling when external endpoints fail.
+    </p>
+
+    <figure>
+      <div class="todo">
+        <strong>TODO (diagram):</strong> Insert an architecture image here later (e.g., a C4-style container diagram).
+        Suggested filename: <code>docs/report/assets/architecture-container.png</code>.
+      </div>
+      <figcaption>
+        Figure 1. Container-level architecture: Angular SPA → NestJS REST API → external knowledge sources (Wikidata,
+        WikiDoc, DBpedia). The backend normalizes outputs and supplies source attribution.
+      </figcaption>
+    </figure>
+
+    <h3>2.2 User-Facing Features</h3>
+    <ul>
+      <li><strong>Condition Search:</strong> user enters a query string; the UI renders up to N candidate conditions.</li>
+      <li><strong>Condition Details:</strong> selecting a candidate opens a details page with sections (overview, prevention, etc.).</li>
+      <li><strong>Transparency:</strong> each details page includes a list of sources with URLs.</li>
+      <li><strong>Resilience:</strong> missing sections render as empty arrays or null fields, not as runtime failures.</li>
+    </ul>
+    <figure>
+    <img
+        src="assets/ui-search.png"
+        alt="HealthScope UI: search page where the user types a condition name."
+        style="max-width:100%; height:auto; border:1px solid #ddd; border-radius:12px;"
+    />
+    <figcaption>
+        Figure 4. HealthScope search interface. Users enter a condition query (e.g., “hypertension”) to retrieve candidate results.
+    </figcaption>
+    </figure>
+
+    <h3>2.3 Non-Functional Goals</h3>
+    <ul>
+      <li><strong>Stability:</strong> stable JSON schema regardless of external coverage.</li>
+      <li><strong>Traceability:</strong> include source URIs for every enriched field.</li>
+      <li><strong>Maintainability:</strong> separate source clients (Wikidata/DBpedia/WikiDoc) from aggregation logic.</li>
+      <li><strong>Performance:</strong> support caching for repeated lookups and avoid unnecessary calls.</li>
+    </ul>
+  </section>
+
+  <section id="data-models">
+    <h2>3. Internal Data Structures / Models</h2>
+
+    <h3>3.1 Core Domain Model: Condition</h3>
+    <p>
+      The central object in HealthScope is a <em>Condition</em> record keyed by a Wikidata Q-ID. The backend aggregates
+      information from multiple sources and returns a normalized JSON object shaped to match UI needs. The model is
+      intentionally conservative: it prefers missing values (null/empty list) over speculative “filled” content.
+    </p>
+
+    <h4>3.1.1 JSON Schema (Conceptual)</h4>
+    <pre><code>{
+  "id": "Q95566669",
+  "name": "hypertension",
+  "description": "elevated pressure in a specific organ of the body (arteries, lungs, head, eyes etc.)",
+  "sections": {
+    "overview": "Narrative summary text ... (nullable)",
+    "symptoms": ["..."],
+    "riskFactors": ["..."],
+    "prevention": ["..."]
+  },
+  "bodySystems": [
+    { "id": "Q...", "label": "..." }
+  ],
+  "sources": [
+    { "name": "Wikidata", "url": "https://www.wikidata.org/wiki/Q95566669" },
+    { "name": "WikiDoc", "url": "https://www.wikidoc.org/index.php/hypertension" }
+  ]
+}</code></pre>
+
+    <h3>3.2 Section Semantics</h3>
+    <table aria-label="sections semantics">
+      <thead>
+        <tr>
+          <th>Field</th>
+          <th>Type</th>
+          <th>Meaning</th>
+          <th>Typical source(s)</th>
+          <th>Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>sections.overview</code></td>
+          <td>string | null</td>
+          <td>Narrative summary / educational introduction</td>
+          <td>WikiDoc, DBpedia abstract (fallback)</td>
+          <td>May be empty for many Q-IDs; null is valid</td>
+        </tr>
+        <tr>
+          <td><code>sections.symptoms</code></td>
+          <td>string[]</td>
+          <td>Labels for symptoms associated with the condition</td>
+          <td>Wikidata claims, WikiDoc subpages</td>
+          <td>Empty list is valid; lists are deduplicated and capped</td>
+        </tr>
+        <tr>
+          <td><code>sections.riskFactors</code></td>
+          <td>string[]</td>
+          <td>Risk factors or contributing factors</td>
+          <td>Wikidata claims, WikiDoc</td>
+          <td>Empty list is common; depends on source coverage</td>
+        </tr>
+        <tr>
+          <td><code>sections.prevention</code></td>
+          <td>string[]</td>
+          <td>Prevention guidance extracted as bullet items</td>
+          <td>WikiDoc</td>
+          <td>Often the most reliable structured list in WikiDoc pages</td>
+        </tr>
+        <tr>
+          <td><code>sources</code></td>
+          <td>{name,url}[]</td>
+          <td>Attribution links for traceability</td>
+          <td>All</td>
+          <td>Only include a source if a meaningful URL exists</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>3.3 Normalization Rules</h3>
+    <p>
+      Aggregation requires consistent rules to ensure stable UI rendering. HealthScope uses the following
+      normalization decisions:
+    </p>
+    <ul>
+      <li><strong>Stable identifier:</strong> condition objects are keyed by a Wikidata Q-ID (<code>Q[0-9]+</code>).</li>
+      <li><strong>Overview prioritization:</strong> use WikiDoc narrative if available; otherwise DBpedia abstract; otherwise null.</li>
+      <li><strong>List hygiene:</strong> list fields are always arrays (never null), deduplicated (case-insensitive), trimmed, and capped.</li>
+      <li><strong>Resilience-first:</strong> external failures do not break the endpoint; they only reduce enrichment coverage.</li>
+      <li><strong>Source truthfulness:</strong> a source is included only if a real page URL was resolved (avoid base URLs that imply false success).</li>
+    </ul>
+
+    <h3>3.4 Example: Real Response (Hypertension)</h3>
+    <p>
+      The following real payload demonstrates the intended schema stability. Here, <code>overview</code> and
+      <code>prevention</code> are populated while <code>symptoms</code> and <code>riskFactors</code> remain empty due to
+      coverage differences in the integrated sources. This is an expected scenario for open linked datasets.
+    </p>
+    <figure>
+    <img
+        src="assets/ui-condition-hypertension.png"
+        alt="HealthScope UI: condition details page showing overview, prevention, and sources."
+        style="max-width:100%; height:auto; border:1px solid #ddd; border-radius:12px;"
+    />
+    <figcaption>
+        Figure 6. Condition details page for a selected Q-ID. The UI renders a normalized response with sections (overview/prevention) and source attribution links.
+    </figcaption>
+    </figure>
+
+    <pre><code>{
+  "id": "Q95566669",
+  "name": "hypertension",
+  "description": "elevated pressure in a specific organ of the body (arteries, lungs, head, eyes etc.)",
+  "sections": {
+    "overview": "Hypertension is a major risk factor for cardiovascular disease ...",
+    "symptoms": [],
+    "riskFactors": [],
+    "prevention": [
+      "Effective measures for the primary prevention of hypertension include: [2]",
+      "Once diagnosed and treated, patients with hypertension are followed-up every month ..."
+    ]
+  },
+  "bodySystems": [],
+  "sources": [
+    { "name": "Wikidata", "url": "https://www.wikidata.org/wiki/Q95566669" },
+    { "name": "WikiDoc", "url": "https://www.wikidoc.org/index.php/hypertension" }
+  ]
+}</code></pre>
+  </section>
+
+  <section id="api">
+    <h2>4. API Design and Implementation (REST)</h2>
+
+    <h3>4.1 Endpoint Overview</h3>
+    <p>
+      The backend exposes a REST API that supports searching conditions and retrieving details. The API is designed for
+      an SPA client, therefore responses are JSON and structured for direct UI rendering. A typical deployment mounts
+      routes under <code>/api</code> (e.g., in cloud/serverless setups), but the conceptual endpoints are:
+    </p>
+    <ul>
+      <li><code>GET /api/conditions/search?q=...</code> — Search for candidate conditions by label.</li>
+      <li><code>GET /api/conditions/{id}</code> — Get aggregated condition details by Wikidata Q-ID.</li>
+      <li><code>GET /api/conditions/{id}/geo?country=RO</code> — Optional geo context (proxy factors; extensible).</li>
+    </ul>
+
+    <h3>4.2 Example: Search</h3>
+    <p>
+      Search returns a list of candidates including a Q-ID and a human label/description. This is used by the UI to
+      present a clickable list and then navigate to a details page.
+    </p>
+    <pre><code>GET /api/conditions/search?q=hypertension
+
+[
+  {
+    "id": "Q95566669",
+    "label": "hypertension",
+    "description": "elevated pressure in a specific organ of the body (arteries, lungs, head, eyes etc.)"
+  },
+  {
+    "id": "Q30314087",
+    "label": "hypertension and brachydactyly syndrome",
+    "description": "human disease"
+  },
+  {
+    "id": "Q1958249",
+    "label": "Chronic Thromboembolic Pulmonary Hypertension",
+    "description": "medical condition"
+  }
+  ... up to 10
+]</code></pre>
+
+    <h3>4.3 Example: Condition Details</h3>
+    <p>
+      Condition details returns a normalized object that merges multiple sources into one schema. The response includes:
+      stable id, UI-friendly title/description, sections, and source attribution.
+    </p>
+    <pre><code>GET /api/conditions/Q95566669
+
+{
+  "id": "Q95566669",
+  "name": "hypertension",
+  "description": "elevated pressure in a specific organ of the body (arteries, lungs, head, eyes etc.)",
+  "sections": {
+    "overview": "Hypertension is a major risk factor for cardiovascular disease ...",
+    "symptoms": [],
+    "riskFactors": [],
+    "prevention": [
+      "Effective measures for the primary prevention of hypertension include: [2]",
+      "Once diagnosed and treated, patients with hypertension are followed-up every month ..."
+    ]
+  },
+  "bodySystems": [],
+  "sources": [
+    { "name": "Wikidata", "url": "https://www.wikidata.org/wiki/Q95566669" },
+    { "name": "WikiDoc", "url": "https://www.wikidoc.org/index.php/hypertension" }
+  ]
+}</code></pre>
+
+    <h3>4.4 Error Handling and Response Guarantees</h3>
+    <p>
+      The API includes defensive validation and resilience patterns to avoid breaking the UI:
+    </p>
+    <ul>
+      <li><strong>Query validation:</strong> <code>search</code> requires a minimum length (e.g., 2 characters) to avoid wasteful calls.</li>
+      <li><strong>ID validation:</strong> <code>getCondition</code> expects Q-IDs and rejects malformed identifiers.</li>
+      <li><strong>Graceful degradation:</strong> external service failures return partial enrichment, not endpoint failure.</li>
+      <li><strong>Schema stability:</strong> arrays are always arrays; nullable fields are explicitly null rather than missing.</li>
+    </ul>
+
+    <h3>4.5 API Implementation Notes (Service-Oriented Design)</h3>
+    <p>
+      Internally, the backend separates concerns:
+    </p>
+    <ul>
+      <li><strong>Source clients:</strong> one service per external source (Wikidata, WikiDoc, DBpedia).</li>
+      <li><strong>Aggregator:</strong> a Conditions service composes source outputs into the normalized Condition model.</li>
+      <li><strong>Controllers:</strong> thin routing layer mapping HTTP requests to service calls and returning JSON.</li>
+    </ul>
+
+    <figure>
+      <div class="todo">
+        <strong>TODO (diagram):</strong> Insert a component diagram showing <code>ConditionsController</code>,
+        <code>ConditionsService</code>, and source clients. Suggested filename:
+        <code>docs/report/assets/architecture-components.png</code>.
+      </div>
+      <figcaption>
+        Figure 2. Internal service decomposition: controllers delegate to an aggregator service, which calls external
+        source services and normalizes results.
+      </figcaption>
+    </figure>
+  </section>
+
+  <section id="linked-data-model">
+    <h2>5. RDF / Linked Data Knowledge Model Considerations</h2>
+
+    <h3>5.1 Why Linked Data for This Project</h3>
+    <p>
+      Linked Data principles enable systems to reference real-world entities using global identifiers (URIs) and to
+      connect datasets through explicit links. In the HealthScope context, the key challenge is not merely “fetching a
+      webpage,” but using a graph-oriented approach to map a user query (string label) to a stable identifier (Q-ID) and
+      then to related entities (symptoms, risk factors, anatomy, etc.) and external pages (WikiDoc/DBpedia).
+    </p>
+
+    <h3>5.2 Primary Identifier: Wikidata Q-ID</h3>
+    <p>
+      HealthScope uses Wikidata entities as the canonical identity for conditions. The system returns Q-IDs to the UI
+      and uses them as the stable primary key for caching, routing, and cross-source linking. This choice offers
+      significant benefits:
+    </p>
+    <ul>
+      <li><strong>Stability:</strong> Q-IDs are stable and globally unique.</li>
+      <li><strong>Graph expansion:</strong> Q-IDs allow exploration through properties (symptoms, subclasses, etc.).</li>
+      <li><strong>Source linking:</strong> Q-IDs can bridge to DBpedia via <code>owl:sameAs</code> and provide a direct Wikidata page URL.</li>
+    </ul>
+
+    <h3>5.3 Vocabulary / Property Usage</h3>
+    <p>
+      The implemented approach is pragmatic: it relies on commonly used Wikidata properties for diseases/medical
+      conditions. Examples include:
+    </p>
+    <ul>
+      <li><code>wdt:P31</code> (“instance of”): used to restrict results to disease/medical condition categories.</li>
+      <li><code>wdt:P279</code> (“subclass of”): used to include subclass hierarchies of disease types.</li>
+      <li><code>wdt:P780</code> (“symptoms”): used to attempt extraction of symptom entities.</li>
+      <li>Additional properties may be used for risk factors or related anatomy depending on entity coverage.</li>
+    </ul>
+    <p>
+      Because Wikidata is collaboratively curated, coverage can vary. The system therefore treats all extracted lists as
+      optional, and focuses on preserving a stable schema rather than guaranteeing completeness for every condition.
+    </p>
+
+    <h3>5.4 Linked Data Principles Conformance</h3>
+    <p>
+      HealthScope follows linked data principles in the following ways:
+    </p>
+    <ul>
+      <li><strong>Use URIs as identifiers:</strong> Q-IDs and source page URLs are returned to the client as stable references.</li>
+      <li><strong>Use HTTP URIs:</strong> the sources include HTTP URLs (Wikidata and WikiDoc pages) that can be dereferenced by users.</li>
+      <li><strong>Provide useful information:</strong> responses include structured JSON with sections plus source attribution.</li>
+      <li><strong>Include links to other things:</strong> the response contains links back to Wikidata/WikiDoc/DBpedia where applicable.</li>
+    </ul>
+    <p class="small">
+      Note: the backend intentionally avoids claiming completeness; it acts as an aggregator and presents what is available
+      while keeping transparency through the <code>sources</code> field.
+    </p>
+  </section>
+
+  <section id="external-sources">
+    <h2>6. Pragmatic Use of External Data/Knowledge Sources</h2>
+
+    <h3>6.1 Wikidata</h3>
+    <p>
+      Wikidata serves two roles: (i) it powers search by matching user input against labels and restricting results to
+      diseases/conditions, and (ii) it provides structured claims for the condition details view (name, description, and
+      potentially symptom/risk factor relations). In implementation, both a SPARQL endpoint query and a Wikidata API call
+      can be used. The practical reason is that SPARQL is strong for searching and filtering, while the API can provide
+      structured entity payloads in a single request.
+    </p>
+
+    <h4>6.1.1 SPARQL Query: Search Conditions by Label</h4>
+    <p>
+      The following SPARQL pattern searches for items where the English label contains the user query and restricts them
+      to disease-like entities using an “instance of” + “subclass of” path. The query returns the item, label, and
+      description.
+    </p>
+    <pre><code>PREFIX wd: &lt;http://www.wikidata.org/entity/&gt;
+PREFIX wdt: &lt;http://www.wikidata.org/prop/direct/&gt;
+PREFIX rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt;
+
+SELECT ?item ?itemLabel ?itemDescription WHERE {
+  ?item rdfs:label ?label .
+  FILTER(CONTAINS(LCASE(?label), LCASE("hypertension")))
+  FILTER(LANG(?label) = "en")
+
+  # disease / medical condition restriction
+  ?item wdt:P31/wdt:P279* wd:Q12136 .
+
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
+}
+LIMIT 10</code></pre>
+
+    <h4>6.1.2 Improving Search Ranking (Optional Enhancement)</h4>
+    <p>
+      A pragmatic improvement is to rank results by the presence of symptom claims (<code>wdt:P780</code>). This does not
+      guarantee quality, but it often prioritizes “richer” entities and improves demo usefulness.
+    </p>
+    <pre><code>PREFIX wd: &lt;http://www.wikidata.org/entity/&gt;
+PREFIX wdt: &lt;http://www.wikidata.org/prop/direct/&gt;
+PREFIX rdfs: &lt;http://www.w3.org/2000/01/rdf-schema#&gt;
+
+SELECT ?item ?itemLabel ?itemDescription (COUNT(?sym) AS ?symCount) WHERE {
+  ?item rdfs:label ?label .
+  FILTER(CONTAINS(LCASE(?label), LCASE("hypertension")))
+  FILTER(LANG(?label) = "en")
+
+  ?item wdt:P31/wdt:P279* wd:Q12136 .
+
+  OPTIONAL { ?item wdt:P780 ?sym . }
+
+  SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
+}
+GROUP BY ?item ?itemLabel ?itemDescription
+ORDER BY DESC(?symCount)
+LIMIT 10</code></pre>
+
+    <h3>6.2 WikiDoc (MediaWiki Pages + Subpages)</h3>
+    <p>
+      WikiDoc is used as a narrative and educational source. In practice, WikiDoc pages may follow MediaWiki patterns
+      and can include subpages such as <code>..._overview</code> (for the overview text) and similarly structured
+      subpages for symptoms, risk factors, and prevention. A key engineering challenge is that WikiDoc titles are not
+      always equal to the user-visible disease label, and direct URL guessing is unreliable.
+    </p>
+    <p>
+      The backend therefore follows a robust strategy:
+    </p>
+    <ol>
+      <li><strong>Resolve a page title:</strong> use MediaWiki search to find the canonical title for a query term.</li>
+      <li><strong>Fetch main page HTML:</strong> attempt to extract sections from headings and lists.</li>
+      <li><strong>Follow subpage links if needed:</strong> detect links like <code>_overview</code> and fetch those pages to extract narrative text.</li>
+      <li><strong>Return only truthful URLs:</strong> if resolution fails, do not claim a WikiDoc source in the output.</li>
+    </ol>
+
+    <h3>6.3 DBpedia (Optional Enrichment via owl:sameAs)</h3>
+    <p>
+      DBpedia can supply an abstract that complements WikiDoc or replaces it when WikiDoc content is unavailable. A
+      common linking approach is to find a DBpedia resource that is <code>owl:sameAs</code> the Wikidata entity, then
+      retrieve <code>dbo:abstract</code> (English).
+    </p>
+
+    <h4>6.3.1 SPARQL Query: DBpedia Abstract from Wikidata Q-ID</h4>
+    <pre><code>PREFIX dbo: &lt;http://dbpedia.org/ontology/&gt;
+PREFIX owl: &lt;http://www.w3.org/2002/07/owl#&gt;
+
+SELECT ?s ?abstract WHERE {
+  ?s owl:sameAs &lt;http://www.wikidata.org/entity/Q95566669&gt; .
+  OPTIONAL { ?s dbo:abstract ?abstract . FILTER (lang(?abstract) = "en") }
+}
+LIMIT 1</code></pre>
+
+    <h3>6.4 Discussion: Data Completeness vs. Schema Stability</h3>
+    <p>
+      The hypertension example illustrates a common linked-data integration reality: not all entities have full, rich,
+      structured claims. A well-designed aggregator therefore must (i) avoid brittle assumptions (e.g., “symptoms always
+      exist”), (ii) keep output schemas stable for UI rendering, and (iii) include source attribution so the user can
+      verify content. HealthScope emphasizes these principles by returning consistent keys and explicit null/empty values
+      rather than omitting fields.
+    </p>
+  </section>
+
+  <section id="dataflows" class="pagebreak">
+    <h2>7. Data/Task Flows</h2>
+
+    <h3>7.1 Condition Search Flow</h3>
+    <ol>
+      <li>User types a query (e.g., “hypertension”) into the frontend search input.</li>
+      <li>Frontend issues <code>GET /api/conditions/search?q=hypertension</code>.</li>
+      <li>Backend queries Wikidata (SPARQL) to retrieve candidate items and labels/descriptions.</li>
+      <li>Backend returns a JSON list; frontend renders results and stores chosen Q-ID for navigation.</li>
+    </ol>
+    <figure>
+    <img
+        src="assets/ui-results.png"
+        alt="HealthScope UI: search results list showing multiple Wikidata Q-ID candidates."
+        style="max-width:100%; height:auto; border:1px solid #ddd; border-radius:12px;"
+    />
+    <figcaption>
+        Figure 5. Search results list returned by <code>GET /api/conditions/search?q=...</code>. Each result includes a Q-ID, label, and optional description.
+    </figcaption>
+    </figure>
+
+
+    <h3>7.2 Condition Details Flow</h3>
+    <ol>
+      <li>User clicks a search result (Q-ID).</li>
+      <li>Frontend routes to details page and issues <code>GET /api/conditions/{id}</code>.</li>
+      <li>Backend loads Wikidata details for the Q-ID.</li>
+      <li>Backend attempts to resolve and fetch WikiDoc pages (main page + optional subpages).</li>
+      <li>Backend optionally enriches overview using DBpedia abstract via <code>owl:sameAs</code> bridging.</li>
+      <li>Backend normalizes fields (stable schema, lists, null handling) and returns a single response object.</li>
+      <li>Frontend renders sections and sources; empty lists are displayed as “No data available yet”.</li>
+    </ol>
+
+    <h3>7.3 Geo Context Flow (Extensible)</h3>
+    <p>
+      A geo context endpoint is included as an extensible feature to connect conditions to country-level context. In the
+      current stage it may return proxy values and factors (e.g., “climate”, “population density”) as placeholders, but
+      the architecture anticipates future integration with open datasets (e.g., health indicators, environmental data).
+    </p>
+
+    <figure>
+      <div class="todo">
+        <strong>TODO (diagram):</strong> Insert a sequence diagram for Search → Details (showing calls to Wikidata/WikiDoc/DBpedia).
+        Suggested filename: <code>docs/report/assets/sequence-search-details.png</code>.
+      </div>
+      <figcaption>
+        Figure 3. Sequence diagram: client search and details retrieval with best-effort enrichment and normalization.
+      </figcaption>
+    </figure>
+  </section>
+
+  <section id="implementation">
+    <h2>8. Implementation Details and Engineering Decisions</h2>
+
+    <h3>8.1 Backend Composition and Responsibilities</h3>
+    <p>
+      The backend is implemented in NestJS. Its core architectural decision is to isolate external integration logic
+      into dedicated services. This improves maintainability: a change in WikiDoc parsing does not force changes in
+      controller logic, and DBpedia can be disabled without affecting Wikidata operations.
+    </p>
+
+    <h4>8.1.1 Source Client Services</h4>
+    <ul>
+      <li><strong>WikidataService:</strong> performs SPARQL search and entity details retrieval; maps IDs to human labels.</li>
+      <li><strong>WikidocService:</strong> resolves page titles via MediaWiki search and extracts narrative/lists from HTML pages and subpages.</li>
+      <li><strong>DbpediaService (optional):</strong> queries DBpedia SPARQL endpoint to retrieve English abstracts linked to Wikidata entities.</li>
+    </ul>
+
+    <h4>8.1.2 Aggregation Service</h4>
+    <p>
+      A <code>ConditionsService</code> aggregates and merges results. It performs:
+    </p>
+    <ul>
+      <li>Input validation (Q-ID format, query constraints).</li>
+      <li>Parallel calls to optional sources (e.g., WikiDoc and DBpedia) with safe wrappers.</li>
+      <li>Normalization: overview selection, list deduplication/capping, and truthful source list creation.</li>
+      <li>Logging (shape-level logs to support debugging and evaluation).</li>
+    </ul>
+
+    <h3>8.2 Frontend Integration Notes</h3>
+    <p>
+      The frontend is an Angular SPA with routing. It consumes the REST API and displays a search screen and a condition
+      details screen. To avoid UI stalls, the client maintains loading flags per request. The data model returned from
+      the backend is directly renderable: strings and arrays map naturally to UI components, and the sources list can be
+      rendered as clickable references.
+    </p>
+
+    <h3>8.3 Caching and Performance</h3>
+    <p>
+      Open knowledge endpoints can be rate-limited or slow. HealthScope supports caching in source clients, especially
+      for DBpedia abstract lookups. A simple in-memory cache keyed by Q-ID with a configurable TTL (e.g., 1 hour) is an
+      effective first step. This reduces repeated requests when users revisit the same condition or when screenshots are
+      taken repeatedly during demos.
+    </p>
+
+    <h3>8.4 Reliability and Resilience Strategy</h3>
+    <p>
+      The design uses best-effort enrichment rather than strict dependencies. Practically, this means:
+    </p>
+    <ul>
+      <li>If WikiDoc is unreachable or parsing fails, the endpoint still returns Wikidata-derived content and sources.</li>
+      <li>If DBpedia is down, the endpoint still returns WikiDoc narrative when available.</li>
+      <li>If both narrative sources fail, the UI can still show name/description from Wikidata and present a stable page.</li>
+    </ul>
+
+    <h3>8.5 Security and Responsible Usage</h3>
+    <p>
+      The system does not store personal health data and does not offer medical advice. It retrieves educational content
+      from public sources. CORS settings are configured to allow the deployed frontend domain and local development.
+      Rate limiting may be added in production to protect third-party endpoints and ensure stable performance.
+    </p>
+  </section>
+
+  <section id="evaluation" class="pagebreak">
+    <h2>9. Evaluation and Case-Oriented Discussion</h2>
+
+    <h3>9.1 Correctness Criteria</h3>
+    <p>
+      Because the system aggregates from open sources, “correctness” is defined operationally:
+    </p>
+    <ul>
+      <li><strong>Identifier correctness:</strong> returned id is a valid Q-ID and the Wikidata URL is consistent with it.</li>
+      <li><strong>Schema correctness:</strong> response always contains required keys with correct types.</li>
+      <li><strong>Attribution correctness:</strong> only list sources whose URLs actually correspond to resolved pages.</li>
+      <li><strong>Resilience correctness:</strong> external failures do not crash the endpoint.</li>
+    </ul>
+
+    <h3>9.2 Coverage Variability</h3>
+    <p>
+      The hypertension example demonstrates that even when the condition is widely known, some structured lists may be
+      empty depending on which Wikidata entity is selected and which properties are populated. This is not a bug in the
+      web application, but a property of open knowledge integration. The design responds by:
+    </p>
+    <ul>
+      <li>Presenting whatever sections are available.</li>
+      <li>Keeping stable output types so the UI remains consistent.</li>
+      <li>Making it possible to improve completeness incrementally (more properties, better parsing, additional sources).</li>
+    </ul>
+
+    <h3>9.3 Demonstration Readiness</h3>
+    <p>
+      For demos and screenshots, the system should prefer Q-IDs that reliably yield a WikiDoc overview and at least one
+      list section (often prevention). If search ranking by symptom count is enabled, it tends to surface richer items.
+    </p>
+
+    <div class="todo">
+      <strong>TODO (screenshots):</strong> Add 3 screenshots for (1) search results, (2) condition details page with
+      overview, (3) sources list and prevention section. Place in
+      <code>docs/report/assets/</code> and reference them with <code>&lt;img&gt;</code> tags.
+    </div>
+  </section>
+
+  <section id="future-work">
+    <h2>10. Conclusion and Future Work</h2>
+    <p>
+      HealthScope demonstrates a practical, end-to-end system for consuming linked open data and presenting it through a
+      modern web application. The project highlights key engineering tradeoffs: source variability vs. schema stability,
+      best-effort enrichment vs. strict dependency, and transparency vs. “perfect completeness.” The implemented
+      architecture supports incremental upgrades without destabilizing the UI.
+    </p>
+
+    <h3>10.1 Planned Improvements</h3>
+    <ul>
+      <li><strong>Richer Wikidata mappings:</strong> expand property coverage for symptoms, risk factors, and anatomy.</li>
+      <li><strong>Better WikiDoc extraction:</strong> more robust section detection and consistent subpage traversal.</li>
+      <li><strong>DBpedia integration:</strong> enable fallback abstracts systematically and cache results aggressively.</li>
+      <li><strong>Geo context enrichment:</strong> replace placeholder values with real open datasets (health/environment indicators).</li>
+      <li><strong>Deployment hardening:</strong> configure serverless deployment, add health checks, and monitor request rates.</li>
+    </ul>
+  </section>
+
+  <section id="appendix-openapi" class="pagebreak">
+    <h2>Appendix A — OpenAPI (Report View)</h2>
+    <p>
+      The full OpenAPI specification is maintained as a separate deliverable. This appendix provides a compact, report-
+      friendly summary of request/response shapes and example payloads.
+    </p>
+
+    <h3>A.1 Endpoints Summary</h3>
+    <table aria-label="openapi summary">
+      <thead>
+        <tr>
+          <th>Method</th>
+          <th>Path</th>
+          <th>Purpose</th>
+          <th>Key query/path params</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>GET</td>
+          <td><code>/api/conditions/search</code></td>
+          <td>Search candidate conditions</td>
+          <td><code>q</code> (string)</td>
+        </tr>
+        <tr>
+          <td>GET</td>
+          <td><code>/api/conditions/{id}</code></td>
+          <td>Get condition details</td>
+          <td><code>id</code> (Q-ID)</td>
+        </tr>
+        <tr>
+          <td>GET</td>
+          <td><code>/api/conditions/{id}/geo</code></td>
+          <td>Geo context (proxy/extensible)</td>
+          <td><code>id</code> (Q-ID), <code>country</code> (ISO2)</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h3>A.2 Example Error Response</h3>
+    <pre><code>{
+  "statusCode": 400,
+  "message": "Invalid id. Expected something like Q35869.",
+  "error": "Bad Request"
+}</code></pre>
+  </section>
+
+  <section id="appendix-scholarly-html">
+    <h2>Appendix B — Notes on “Scholarly HTML” Format</h2>
+    <p>
+      This document is written as a single HTML file suitable for publication within the project repository and for
+      conversion to PDF via browser printing. It contains numbered sections, explicit appendices, code listings, tables,
+      and diagram placeholders to be replaced with final images. This approach supports both the “web-native” delivery
+      requirement and the “equivalent to minimum 10 A4 pages” constraint.
+    </p>
+    <p class="small">
+      Tip: when printing to PDF, enable “Background graphics” if you want the diagram placeholders to appear as styled boxes.
+    </p>
+  </section>
+
+  <section id="references">
+    <h2>References</h2>
+    <ol>
+      <li>Wikidata — https://www.wikidata.org/</li>
+      <li>DBpedia — https://dbpedia.org/</li>
+      <li>WikiDoc — https://www.wikidoc.org/</li>
+      <li>MediaWiki API (used by WikiDoc) — https://www.mediawiki.org/wiki/API:Main_page</li>
+      <li>Linked Data principles — https://www.w3.org/DesignIssues/LinkedData.html</li>
+    </ol>
+    <p class="small">
+      Note: URLs are listed for reference and transparency; the implementation relies on public endpoints and open web content.
+    </p>
+  </section>
+
+</main>
+</body>
+</html>

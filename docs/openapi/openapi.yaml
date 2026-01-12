@@ -1,35 +1,47 @@
 openapi: 3.0.3
+
 info:
   title: HealthScope API
-  version: 1.0.0
   description: >
-    HealthScope REST API (WADe project). Provides condition search and condition
-    details aggregated from Wikidata, DBpedia and WikiDoc. Educational only.
+    REST API for the WADe project "HealthScope".
+    The API aggregates medical condition data from Linked Data sources
+    such as Wikidata, WikiDoc, and DBpedia and exposes a normalized JSON model
+    suitable for a Web frontend.
+  version: "1.0.0"
+  contact:
+    name: WADe Project Team
+  license:
+    name: MIT
+
 servers:
-  - url: http://localhost:3000
+  - url: http://localhost:3000/api
     description: Local development server
 
 tags:
   - name: Conditions
-    description: Condition search and details
+    description: Medical condition search and details
+  - name: Geo
+    description: Geographic and contextual information
 
 paths:
-  /api/conditions/search:
+
+  /conditions/search:
     get:
-      tags: [Conditions]
+      tags:
+        - Conditions
       summary: Search medical conditions
       description: >
-        Searches for medical conditions by query string. Results come primarily from Wikidata.
-        The order may be ranked to prefer entities with richer metadata.
+        Performs a case-insensitive search over medical conditions.
+        Results are identified by Wikidata Q-IDs and include labels and short descriptions.
       parameters:
-        - in: query
-          name: q
+        - name: q
+          in: query
           required: true
+          description: Search string (minimum 2 characters).
           schema:
             type: string
             minLength: 2
-          example: asthma
-          description: Search query (minimum 2 characters)
+            example: hypertension
       responses:
         "200":
           description: List of matching conditions
@@ -38,218 +50,153 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/ConditionSearchItem"
-              examples:
-                example1:
-                  value:
-                    - id: Q35869
-                      label: Asthma
-                      description: Inflammatory disease of the airways of the lungs
-                    - id: Q12204
-                      label: Diabetes mellitus
-                      description: Group of metabolic disorders characterized by hyperglycemia
+                  $ref: "#/components/schemas/SearchResult"
+              example:
+                - id: Q95566669
+                  label: hypertension
+                  description: elevated pressure in a specific organ of the body
+                - id: Q7663896
+                  label: systolic hypertension
+                  description: elevated systolic blood pressure
         "400":
           description: Invalid query
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ErrorResponse"
-              examples:
-                tooShort:
-                  value:
-                    statusCode: 400
-                    message: Query must be at least 2 characters.
-                    error: Bad Request
+                $ref: "#/components/schemas/Error"
 
-  /api/conditions/{id}:
+  /conditions/{id}:
     get:
-      tags: [Conditions]
+      tags:
+        - Conditions
       summary: Get condition details
       description: >
-        Returns a normalized condition object including narrative overview (WikiDoc/DBpedia),
-        structured sections, body systems and sources.
+        Returns aggregated information about a medical condition identified by a Wikidata Q-ID.
+        The response may include narrative sections, structured lists, and source attribution.
       parameters:
-        - in: path
-          name: id
+        - name: id
+          in: path
           required: true
+          description: Wikidata Q-ID (e.g., Q95566669)
           schema:
             type: string
-            pattern: "^Q\\d+$"
-          example: Q35869
-          description: Wikidata entity id (Q-number)
+            pattern: "^Q[0-9]+$"
+            example: Q95566669
       responses:
         "200":
           description: Condition details
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ConditionDetails"
-              examples:
-                example1:
-                  value:
-                    id: Q8054567
-                    name: Yokkaichi asthma
-                    description: Epidemic of asthma caused by air pollution in Japan
-                    sections:
-                      overview: null
-                      symptoms: []
-                      riskFactors: ["air pollution"]
-                      prevention: []
-                    bodySystems: []
-                    sources:
-                      - name: Wikidata
-                        url: https://www.wikidata.org/wiki/Q8054567
-                      - name: WikiDoc
-                        url: https://www.wikidoc.org/index.php/
-                      - name: DBpedia
-                        url: http://dbpedia.org/resource/Yokkaichi_asthma
+                $ref: "#/components/schemas/Condition"
+              example:
+                id: Q95566669
+                name: hypertension
+                description: elevated pressure in a specific organ of the body
+                sections:
+                  overview: Hypertension is a major risk factor for cardiovascular disease.
+                  symptoms: []
+                  riskFactors: []
+                  prevention:
+                    - Effective measures for the primary prevention of hypertension include lifestyle changes.
+                bodySystems: []
+                sources:
+                  - name: Wikidata
+                    url: https://www.wikidata.org/wiki/Q95566669
+                  - name: WikiDoc
+                    url: https://www.wikidoc.org/index.php/hypertension
         "400":
-          description: Invalid id format
+          description: Invalid Q-ID
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ErrorResponse"
-              examples:
-                badId:
-                  value:
-                    statusCode: 400
-                    message: Invalid id. Expected something like Q35869.
-                    error: Bad Request
+                $ref: "#/components/schemas/Error"
         "404":
-          description: Condition not found (optional)
+          description: Condition not found
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ErrorResponse"
+                $ref: "#/components/schemas/Error"
 
-  /api/conditions/{id}/body:
+  /conditions/{id}/geo:
     get:
-      tags: [Conditions]
-      summary: Get body systems impacted by condition
-      description: Returns body systems/anatomical context (best effort; may be empty for sparse entities).
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: string
-            pattern: "^Q\\d+$"
-          example: Q41861
-      responses:
-        "200":
-          description: Body impact
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/BodyImpactResponse"
-              examples:
-                example1:
-                  value:
-                    id: Q41861
-                    bodySystems:
-                      - id: Q7366
-                        label: cardiovascular system
-        "400":
-          description: Invalid id
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-
-  /api/conditions/{id}/geo:
-    get:
-      tags: [Conditions]
-      summary: Get geographic context (proxy)
+      tags:
+        - Geo
+      summary: Get geographic context for a condition
       description: >
-        Returns an educational proxy "risk context" for a condition in a given country.
-        Not epidemiology; intended for demonstration and UI explanations.
+        Returns a simplified geographic risk/context proxy for a given condition and country.
+        This endpoint is educational and not intended for medical diagnosis.
       parameters:
-        - in: path
-          name: id
+        - name: id
+          in: path
           required: true
           schema:
             type: string
-            pattern: "^Q\\d+$"
-          example: Q12204
-        - in: query
-          name: country
+            example: Q95566669
+        - name: country
+          in: query
           required: true
+          description: ISO 2-letter country code
           schema:
             type: string
-            minLength: 2
-            maxLength: 2
-          example: RO
-          description: ISO 3166-1 alpha-2 country code
+            example: RO
       responses:
         "200":
-          description: Geographic context proxy response
+          description: Geographic context
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/GeoContextResponse"
-              examples:
-                example1:
-                  value:
-                    id: Q12204
-                    country: RO
-                    value: 0.6
-                    valueLabel: Estimated risk context (proxy)
-                    factors:
-                      - Climate
-                      - Population density
-                      - Industrial exposure
-                      - Lifestyle/diet
-                    sources:
-                      - name: Educational proxy
-                        url: null
+                $ref: "#/components/schemas/GeoContext"
         "400":
-          description: Invalid request (missing country, invalid id, etc.)
+          description: Invalid input
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ErrorResponse"
+                $ref: "#/components/schemas/Error"
 
 components:
+
   schemas:
-    ConditionSearchItem:
+
+    SearchResult:
       type: object
-      additionalProperties: false
-      required: [id, label]
       properties:
         id:
           type: string
-          description: Wikidata entity id
-          example: Q35869
+          description: Wikidata Q-ID
         label:
           type: string
-          example: Asthma
         description:
           type: string
           nullable: true
-          example: Inflammatory disease of the airways of the lungs
 
-    SourceLink:
+    Condition:
       type: object
-      additionalProperties: false
-      required: [name, url]
       properties:
+        id:
+          type: string
         name:
           type: string
-          example: Wikidata
-        url:
+        description:
           type: string
           nullable: true
-          example: https://www.wikidata.org/wiki/Q35869
+        sections:
+          $ref: "#/components/schemas/Sections"
+        bodySystems:
+          type: array
+          items:
+            $ref: "#/components/schemas/BodySystem"
+        sources:
+          type: array
+          items:
+            $ref: "#/components/schemas/Source"
 
     Sections:
       type: object
-      additionalProperties: false
-      required: [overview, symptoms, riskFactors, prevention]
       properties:
         overview:
           type: string
           nullable: true
-          description: Narrative overview (WikiDoc/DBpedia), best-effort
         symptoms:
           type: array
           items:
@@ -265,86 +212,32 @@ components:
 
     BodySystem:
       type: object
-      additionalProperties: false
-      required: [id, label]
       properties:
         id:
           type: string
-          description: Wikidata id (preferred) or identifier
-          example: Q7366
         label:
           type: string
-          example: cardiovascular system
 
-    ConditionDetails:
+    Source:
       type: object
-      additionalProperties: false
-      required: [id, name, description, sections, bodySystems, sources]
-      properties:
-        id:
-          type: string
-          example: Q41861
-        name:
-          type: string
-          example: Hypertension
-        description:
-          type: string
-          nullable: true
-          example: High blood pressure
-        sections:
-          $ref: "#/components/schemas/Sections"
-        bodySystems:
-          type: array
-          items:
-            $ref: "#/components/schemas/BodySystem"
-        sources:
-          type: array
-          items:
-            $ref: "#/components/schemas/SourceLink"
-
-    BodyImpactResponse:
-      type: object
-      additionalProperties: false
-      required: [id, bodySystems]
-      properties:
-        id:
-          type: string
-          example: Q35869
-        bodySystems:
-          type: array
-          items:
-            $ref: "#/components/schemas/BodySystem"
-
-    GeoSource:
-      type: object
-      additionalProperties: false
-      required: [name, url]
       properties:
         name:
           type: string
-          example: Educational proxy
         url:
           type: string
           nullable: true
 
-    GeoContextResponse:
+    GeoContext:
       type: object
-      additionalProperties: false
-      required: [id, country, value, valueLabel, factors, sources]
       properties:
         id:
           type: string
-          example: Q12204
         country:
           type: string
-          example: RO
         value:
           type: number
-          format: float
-          example: 0.6
         valueLabel:
           type: string
-          example: Estimated risk context (proxy)
         factors:
           type: array
           items:
@@ -352,22 +245,12 @@ components:
         sources:
           type: array
           items:
-            $ref: "#/components/schemas/GeoSource"
+            $ref: "#/components/schemas/Source"
 
-    ErrorResponse:
+    Error:
       type: object
-      additionalProperties: true
-      required: [statusCode, message, error]
       properties:
         statusCode:
           type: integer
-          example: 400
         message:
-          oneOf:
-            - type: string
-            - type: array
-              items:
-                type: string
-        error:
           type: string
-          example: Bad Request
