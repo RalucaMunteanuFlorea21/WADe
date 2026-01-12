@@ -26,6 +26,7 @@ HealthScope is a web application that helps users explore medical conditions usi
 cd server
 npm install
 npm run start:dev
+```
 
 ### Frontend (Angular 20)
 ```bash
@@ -33,8 +34,9 @@ cd client
 cd mead
 npm install
 ng serve
-
-Frontend: http://localhost:4200
-Backend: http://localhost:3000
+```
+Local Testing
+### Frontend: http://localhost:4200
+### Backend: http://localhost:3000
 
 
