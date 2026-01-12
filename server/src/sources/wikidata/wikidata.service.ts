@@ -12,17 +12,93 @@ export interface WikidataConditionDetails {
   bodySystems: Array<{ id: string; label: string }>;
 }
 
-
 @Injectable()
 export class WikidataService {
   constructor(private readonly config: ConfigService) {}
 
-  async searchCondition(q: string): Promise<Array<{ id: string; label: string; description?: string }>> {
-    const endpoint = this.config.get<string>('WIKIDATA_ENDPOINT') ?? 'https://query.wikidata.org/sparql';
+  /**
+   * Fetch basic country statistics by ISO3166-1 alpha-2 code.
+   * Returns population and area (km^2) when available.
+   */
+  async getCountryStats(alpha2: string): Promise<{
+    id: string | null;
+    label: string | null;
+    population?: number | null;
+    areaKm2?: number | null;
+    lat?: number | null;
+    lon?: number | null;
+  } | null> {
+    const endpoint =
+      this.config.get<string>('WIKIDATA_ENDPOINT') ??
+      'https://query.wikidata.org/sparql';
+    const code = (alpha2 ?? '').toString().trim().toUpperCase();
+    if (!/^[A-Z]{2}$/.test(code)) return null;
 
-const safeQ = q.replace(/["\\]/g, ''); // minimal sanitize
+    const query = `
+      SELECT ?country ?countryLabel ?pop ?area ?coord WHERE {
+        ?country wdt:P297 "${code}" .
+        OPTIONAL { ?country wdt:P1082 ?pop . }
+        OPTIONAL { ?country wdt:P2046 ?area . }
+        OPTIONAL { ?country wdt:P625 ?coord . }
+        SERVICE wikibase:label { bd:serviceParam wikibase:language "en". }
+      }
+      LIMIT 1
+    `;
 
-const query = `
+    try {
+      const res = await axios.get(endpoint, {
+        params: { format: 'json', query },
+        headers: { 'User-Agent': 'HealthScope/1.0 (student project)' },
+        timeout: 20000,
+      });
+
+      const row = res.data?.results?.bindings?.[0];
+      if (!row) return null;
+
+      const parseNum = (v: any) => {
+        if (!v) return null;
+        const s = v.value?.toString?.();
+        if (!s) return null;
+        const n = Number(s);
+        return Number.isFinite(n) ? n : null;
+      };
+
+      const coordRaw = row?.coord?.value ?? null;
+      let lat: number | null = null;
+      let lon: number | null = null;
+      if (coordRaw && typeof coordRaw === 'string') {
+        // coordRaw often looks like "Point(longitude latitude)"
+        const m = coordRaw.match(/Point\(([-0-9.]+)\s+([-0-9.]+)\)/i);
+        if (m) {
+          lon = Number(m[1]);
+          lat = Number(m[2]);
+        }
+      }
+
+      return {
+        id: row?.country?.value ? row.country.value.split('/').pop() : null,
+        label: row?.countryLabel?.value ?? null,
+        population: parseNum(row?.pop),
+        areaKm2: parseNum(row?.area),
+        lat: lat,
+        lon: lon,
+      };
+    } catch (e) {
+      logger('[Wikidata] getCountryStats failed', { code, error: String(e) });
+      return null;
+    }
+  }
+
+  async searchCondition(
+    q: string,
+  ): Promise<Array<{ id: string; label: string; description?: string }>> {
+    const endpoint =
+      this.config.get<string>('WIKIDATA_ENDPOINT') ??
+      'https://query.wikidata.org/sparql';
+
+    const safeQ = q.replace(/["\\]/g, ''); // minimal sanitize
+
+    const query = `
   SELECT ?item ?itemLabel ?itemDescription
          (COUNT(DISTINCT ?sym) AS ?symCount)
          (COUNT(DISTINCT ?rf) AS ?rfCount)
@@ -46,7 +122,6 @@ const query = `
   ORDER BY DESC(?exactBoost) DESC(?startsBoost) DESC(?symCount + ?rfCount) DESC(BOUND(?itemDescription))
   LIMIT 10
 `;
-
 
     const response = await axios.get(endpoint, {
       params: { format: 'json', query },
@@ -81,11 +156,26 @@ const query = `
 
       const entity = res.data?.entities?.[id];
       if (!entity) {
-        return { id, name: null, description: null, symptoms: [], riskFactors: [], bodySystems: [] };
+        return {
+          id,
+          name: null,
+          description: null,
+          symptoms: [],
+          riskFactors: [],
+          bodySystems: [],
+        };
       }
 
-      const name = entity.labels?.en?.value ?? (entity.labels ? (Object.values(entity.labels)[0] as any)?.value ?? null : null);
-      const description = entity.descriptions?.en?.value ?? (entity.descriptions ? (Object.values(entity.descriptions)[0] as any)?.value ?? null : null);
+      const name =
+        entity.labels?.en?.value ??
+        (entity.labels
+          ? ((Object.values(entity.labels)[0] as any)?.value ?? null)
+          : null);
+      const description =
+        entity.descriptions?.en?.value ??
+        (entity.descriptions
+          ? ((Object.values(entity.descriptions)[0] as any)?.value ?? null)
+          : null);
 
       const extractIdsFromClaims = (props: string[]) => {
         const ids: string[] = [];
@@ -94,39 +184,58 @@ const query = `
           for (const c of arr) {
             const dv = c.mainsnak?.datavalue;
             if (!dv) continue;
-            if (dv.type === 'wikibase-entityid' && dv.value?.id) ids.push(dv.value.id);
+            if (dv.type === 'wikibase-entityid' && dv.value?.id)
+              ids.push(dv.value.id);
             else if (dv.type === 'string' && dv.value) ids.push(dv.value);
-            else if (dv.type === 'monolingualtext' && dv.value?.text) ids.push(dv.value.text);
+            else if (dv.type === 'monolingualtext' && dv.value?.text)
+              ids.push(dv.value.text);
           }
         }
         return ids;
       };
 
       const symptomProps = ['P780'];
-      const riskProps = ['P5642', 'P1542', 'P828']; 
-      const bodyProps = ['P927', 'P361', 'P527'];   
-
-
+      const riskProps = ['P5642', 'P1542', 'P828'];
+      const bodyProps = ['P927', 'P361', 'P527'];
 
       const symptomsIds = extractIdsFromClaims(symptomProps);
       const riskIds = extractIdsFromClaims(riskProps);
       const bodyIds = extractIdsFromClaims(bodyProps);
 
-      const allEntityIds = Array.from(new Set([...symptomsIds, ...riskIds, ...bodyIds].filter(i => typeof i === 'string' && i.startsWith('Q'))));
+      const allEntityIds = Array.from(
+        new Set(
+          [...symptomsIds, ...riskIds, ...bodyIds].filter(
+            (i) => typeof i === 'string' && i.startsWith('Q'),
+          ),
+        ),
+      );
 
       const idToLabel: Record<string, string> = {};
       if (allEntityIds.length) {
         const batch = allEntityIds.join('|');
         try {
           const lblRes = await axios.get(api, {
-            params: { action: 'wbgetentities', ids: batch, props: 'labels', languages: 'en', format: 'json' },
+            params: {
+              action: 'wbgetentities',
+              ids: batch,
+              props: 'labels',
+              languages: 'en',
+              format: 'json',
+            },
             headers: { 'User-Agent': 'HealthScope/1.0 (student project)' },
             timeout: 15000,
           });
-          logger('[Wikidata] wbgetentities labels response for batch', batch, lblRes.data);
+          logger(
+            '[Wikidata] wbgetentities labels response for batch',
+            batch,
+            lblRes.data,
+          );
           const entities = lblRes.data.entities || {};
           for (const k of Object.keys(entities)) {
-            idToLabel[k] = entities[k].labels?.en?.value ?? ((Object.values(entities[k].labels || {})[0] as any)?.value) ?? k;
+            idToLabel[k] =
+              entities[k].labels?.en?.value ??
+              (Object.values(entities[k].labels || {})[0] as any)?.value ??
+              k;
           }
         } catch (e) {
           // ignore label resolution failures
@@ -134,14 +243,12 @@ const query = `
       }
 
       const mapIdsToLabels = (arr: string[]) =>
-        arr
-          .map(i => (i && idToLabel[i] ? idToLabel[i] : i))
-          .filter(Boolean);
+        arr.map((i) => (i && idToLabel[i] ? idToLabel[i] : i)).filter(Boolean);
 
       const mapIdsToIdLabel = (arr: string[]) =>
         arr
-          .filter(i => typeof i === 'string' && i.startsWith('Q'))
-          .map(i => ({ id: i, label: idToLabel[i] ?? i }));
+          .filter((i) => typeof i === 'string' && i.startsWith('Q'))
+          .map((i) => ({ id: i, label: idToLabel[i] ?? i }));
 
       return {
         id,
@@ -151,9 +258,15 @@ const query = `
         riskFactors: mapIdsToLabels(riskIds),
         bodySystems: mapIdsToIdLabel(bodyIds),
       } as WikidataConditionDetails;
-
     } catch (err) {
-      return { id, name: null, description: null, symptoms: [], riskFactors: [], bodySystems: [] };
+      return {
+        id,
+        name: null,
+        description: null,
+        symptoms: [],
+        riskFactors: [],
+        bodySystems: [],
+      };
     }
   }
 }

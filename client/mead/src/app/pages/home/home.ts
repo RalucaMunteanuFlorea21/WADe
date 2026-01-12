@@ -9,9 +9,11 @@ import { ConditionsApiService, ConditionSearchItem } from '../../services/condit
   standalone: true,
   imports: [CommonModule, FormsModule, RouterLink],
   templateUrl: './home.html',
+  styleUrls: ['./home.css'],
 })
 export class Home {
   q = 'hypertension';
+  lastQuery = '';
   results: ConditionSearchItem[] = [];
   loading = false;
   error: string | null = null;
@@ -25,6 +27,8 @@ export class Home {
       this.cdr.detectChanges();
       return;
     }
+
+    this.lastQuery = query;
 
     this.loading = true;
     this.error = null;

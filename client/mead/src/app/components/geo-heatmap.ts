@@ -40,61 +40,64 @@ interface CountryData {
       </div>
     </div>
   `,
-  styles: [`
-    .geo-container {
-      margin: 24px 0;
-    }
+  styles: [
+    `
+      .geo-container {
+        margin: 24px 0;
+      }
 
-    h4 {
-      margin-bottom: 16px;
-    }
+      h4 {
+        margin-bottom: 16px;
+      }
 
-    .map {
-      height: 300px;
-      border-radius: 8px;
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-      margin-bottom: 16px;
-      z-index: 1;
-    }
-
-    .legend {
-      display: flex;
-      gap: 16px;
-      flex-wrap: wrap;
-      background: var(--bg-light);
-      padding: 12px;
-      border-radius: 8px;
-      font-size: 14px;
-    }
-
-    .legend-item {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    .legend-color {
-      width: 20px;
-      height: 20px;
-      border-radius: 3px;
-      border: 1px solid rgba(0, 0, 0, 0.1);
-    }
-
-    @media (max-width: 640px) {
       .map {
-        height: 250px;
+        height: 300px;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        margin-bottom: 16px;
+        z-index: 1;
       }
 
       .legend {
-        flex-direction: column;
+        display: flex;
+        gap: 16px;
+        flex-wrap: wrap;
+        background: var(--bg-light);
+        padding: 12px;
+        border-radius: 8px;
+        font-size: 14px;
+      }
+
+      .legend-item {
+        display: flex;
+        align-items: center;
         gap: 8px;
       }
-    }
-  `]
+
+      .legend-color {
+        width: 20px;
+        height: 20px;
+        border-radius: 3px;
+        border: 1px solid rgba(0, 0, 0, 0.1);
+      }
+
+      @media (max-width: 640px) {
+        .map {
+          height: 250px;
+        }
+
+        .legend {
+          flex-direction: column;
+          gap: 8px;
+        }
+      }
+    `,
+  ],
 })
 export class GeoHeatmapComponent implements OnInit {
   @Input() country: string = 'RO';
   @Input() conditionName: string = '';
+  @Input() geo: any | null = null; // server-provided geo object
   @ViewChild('mapElement') mapElement?: ElementRef;
 
   private map: any;
@@ -102,25 +105,25 @@ export class GeoHeatmapComponent implements OnInit {
 
   // Sample data for educational purposes
   countryData: { [key: string]: CountryData[] } = {
-    'RO': [
+    RO: [
       { name: 'Bucharest', lat: 44.4268, lng: 26.1025, risk: 0.7 },
       { name: 'Cluj-Napoca', lat: 46.7712, lng: 23.6236, risk: 0.5 },
       { name: 'Timișoara', lat: 45.7489, lng: 21.2087, risk: 0.6 },
     ],
-    'FR': [
+    FR: [
       { name: 'Paris', lat: 48.8566, lng: 2.3522, risk: 0.6 },
-      { name: 'Lyon', lat: 45.7640, lng: 4.8357, risk: 0.5 },
+      { name: 'Lyon', lat: 45.764, lng: 4.8357, risk: 0.5 },
     ],
-    'DE': [
-      { name: 'Berlin', lat: 52.5200, lng: 13.4050, risk: 0.5 },
-      { name: 'Munich', lat: 48.1351, lng: 11.5820, risk: 0.4 },
+    DE: [
+      { name: 'Berlin', lat: 52.52, lng: 13.405, risk: 0.5 },
+      { name: 'Munich', lat: 48.1351, lng: 11.582, risk: 0.4 },
     ],
-    'GB': [
+    GB: [
       { name: 'London', lat: 51.5074, lng: -0.1278, risk: 0.6 },
       { name: 'Manchester', lat: 53.4808, lng: -2.2426, risk: 0.5 },
     ],
-    'US': [
-      { name: 'New York', lat: 40.7128, lng: -74.0060, risk: 0.7 },
+    US: [
+      { name: 'New York', lat: 40.7128, lng: -74.006, risk: 0.7 },
       { name: 'Los Angeles', lat: 34.0522, lng: -118.2437, risk: 0.6 },
     ],
   };
@@ -151,26 +154,55 @@ export class GeoHeatmapComponent implements OnInit {
     if (!this.map) return;
 
     // Clear existing markers
-    this.markers.forEach(m => this.map.removeLayer(m));
+    this.markers.forEach((m) => this.map.removeLayer(m));
     this.markers = [];
 
     const data = this.countryData[this.country] || [];
-    
-    data.forEach(city => {
-      const color = this.getRiskColor(city.risk);
-      const marker = L.circleMarker([city.lat, city.lng], {
-        radius: 8 + city.risk * 10,
+
+    if (this.geo && this.geo.lat != null && this.geo.lon != null) {
+      // Show a country-level prevalence circle
+      const risk = (this.geo.estimatedPrevalencePercent ?? 0) / 100;
+      const color = this.getRiskColor(risk);
+      const radius = 20000 + risk * 50000; // meters — relative visual scale
+
+      const circle = L.circle([this.geo.lat, this.geo.lon], {
+        radius,
         fillColor: color,
         color: 'rgba(0,0,0,0.2)',
-        weight: 2,
+        weight: 1,
         opacity: 0.8,
-        fillOpacity: 0.7,
+        fillOpacity: 0.45,
       })
-        .bindPopup(`<b>${city.name}</b><br>Risk Level: ${(city.risk * 100).toFixed(0)}%`)
+        .bindPopup(
+          `<b>${this.geo.countryLabel || this.country}</b><br>Estimated prevalence: ${
+            this.geo.estimatedPrevalencePercent
+          }%<br>Population: ${this.geo.population ?? 'n/a'}`
+        )
         .addTo(this.map);
 
-      this.markers.push(marker);
-    });
+      this.markers.push(circle);
+      // center map on country
+      try {
+        this.map.setView([this.geo.lat, this.geo.lon], 5);
+      } catch {}
+    } else {
+      // fallback to city samples
+      data.forEach((city) => {
+        const color = this.getRiskColor(city.risk);
+        const marker = L.circleMarker([city.lat, city.lng], {
+          radius: 8 + city.risk * 10,
+          fillColor: color,
+          color: 'rgba(0,0,0,0.2)',
+          weight: 2,
+          opacity: 0.8,
+          fillOpacity: 0.7,
+        })
+          .bindPopup(`<b>${city.name}</b><br>Risk Level: ${(city.risk * 100).toFixed(0)}%`)
+          .addTo(this.map);
+
+        this.markers.push(marker);
+      });
+    }
 
     // Fit bounds
     if (this.markers.length > 0) {

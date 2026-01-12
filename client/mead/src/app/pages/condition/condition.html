@@ -45,13 +45,6 @@
       >
         📊 Data & Maps
       </button>
-      <button 
-        type="button" 
-        [class.active]="tab==='geo'" 
-        (click)="setTab('geo')"
-      >
-        Geography
-      </button>
     </div>
 
     <!-- OVERVIEW TAB -->
@@ -136,12 +129,22 @@
     <!-- VISUALIZATIONS TAB -->
     <section *ngIf="tab==='visualizations'">
       <h3>📊 Data Visualizations & Maps</h3>
-      
+      <div style="display:flex;gap:12px;align-items:center;margin-bottom:12px;">
+        <label style="font-weight:600;margin-right:8px;">Country</label>
+        <select [(ngModel)]="country" (change)="refreshGeo()">
+          <option *ngFor="let c of countries" [value]="c">{{ c }}</option>
+        </select>
+        <button type="button" (click)="refreshGeo()" style="margin-left:8px;">Refresh Geo</button>
+        <div *ngIf="loadingGeo" style="margin-left:12px;color:var(--text-muted);">Loading geo...</div>
+        <div *ngIf="geoError" style="margin-left:12px;color:#b91c1c;">{{ geoError }}</div>
+      </div>
+
       <!-- Data Visualization Charts -->
       <app-data-visualization
         *ngIf="data"
-        [symptoms]="data.sections.symptoms || []"
-        [riskFactors]="data.sections.riskFactors || []"
+        [symptoms]="(data.sections.symptomsScores?.length ? data.sections.symptomsScores : (data.sections.symptoms || [])) || []"
+        [riskFactors]="(data.sections.riskFactorsScores?.length ? data.sections.riskFactorsScores : (data.sections.riskFactors || [])) || []"
+        [indicators]="data.indicators || []"
       ></app-data-visualization>
 
       <!-- Geo Heatmap Component -->
@@ -149,62 +152,12 @@
       <app-geo-heatmap 
         *ngIf="data" 
         [conditionName]="data?.name || ''"
+        [country]="country"
+        [geo]="geo"
       ></app-geo-heatmap>
 
       <p class="muted small" style="margin-top: 32px; padding: 16px; background: rgba(37, 99, 235, 0.05); border-radius: 8px; border-left: 4px solid var(--accent);">
         ⓘ These visualizations are educational representations. Actual disease prevalence varies based on multiple factors including healthcare infrastructure, climate, population density, and genetic factors.
-      </p>
-    </section>
-
-    <!-- GEOGRAPHY TAB -->
-    <section *ngIf="tab==='geo'">
-      <h3>Geographic Context</h3>
-
-      <div class="geo-controls">
-        <div class="row">
-          <label for="country">Select Country:</label>
-          <select id="country" name="country" [(ngModel)]="country" [disabled]="loadingGeo">
-            <option *ngFor="let c of countries" [value]="c">{{ c }}</option>
-          </select>
-          <button type="button" (click)="refreshGeo()" [disabled]="loadingGeo">
-            <span *ngIf="!loadingGeo">Load Data</span>
-            <span *ngIf="loadingGeo">
-              <span class="spinner"></span>
-              Loading...
-            </span>
-          </button>
-        </div>
-      </div>
-
-      <div *ngIf="geoError" class="error">
-        {{ geoError }}
-      </div>
-
-      <div *ngIf="geo && !loadingGeo" class="geo-data" style="animation: slideInUp 0.4s ease-out;">
-        <div class="geo-value">
-          <p><b>{{ geo.valueLabel }}</b></p>
-          <p class="muted">Region: {{ geo.country }}</p>
-        </div>
-
-        <h4>Contributing Factors</h4>
-        <ul class="list">
-          <li *ngFor="let f of geo.factors">
-            <span class="factor-badge">{{ f }}</span>
-          </li>
-        </ul>
-
-        <details>
-          <summary>View Raw Data</summary>
-          <pre>{{ geo | json }}</pre>
-        </details>
-      </div>
-
-      <p class="muted small" *ngIf="!geo && !loadingGeo" style="margin-top: 16px;">
-        Select a country and click "Load Data" to see geographic context
-      </p>
-
-      <p class="muted small" style="margin-top: 32px; padding: 16px; background: rgba(37, 99, 235, 0.05); border-radius: 8px; border-left: 4px solid var(--accent);">
-        ⓘ Factors are educational proxies showing possible influences (climate, population density, industrial exposure), not diagnostic or predictive.
       </p>
     </section>
   </ng-container>

@@ -15,13 +15,13 @@ export class ConditionsController {
     return this.conditionsService.getCondition(id);
   }
 
+  @Get(':id/geo')
+  getGeo(@Param('id') id: string, @Query('country') country: string) {
+    return this.conditionsService.getGeo(id, country);
+  }
+
   @Get(':id/body')
   getBody(@Param('id') id: string) {
     return this.conditionsService.getBodyImpact(id);
-  }
-
-  @Get(':id/geo')
-  getGeo(@Param('id') id: string, @Query('country') country: string) {
-    return this.conditionsService.getGeoContext(id, country);
   }
 }

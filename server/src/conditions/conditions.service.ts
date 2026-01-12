@@ -65,21 +65,90 @@ export class ConditionsService {
       (dbp?.abstract && dbp.abstract.trim().length ? dbp.abstract : null) ??
       null;
 
-    const symptoms = [
-      ...(Array.isArray(wd?.symptoms) ? wd.symptoms : []),
-      ...(Array.isArray(doc?.symptoms) && doc.symptoms.length
-        ? doc.symptoms
-        : []),
-    ].slice(0, 20); // limit to 20 unique items
-
-    const riskFactors = [
-      ...(Array.isArray(wd?.riskFactors) ? wd.riskFactors : []),
-      ...(Array.isArray(doc?.riskFactors) && doc.riskFactors.length
-        ? doc.riskFactors
-        : []),
-    ].slice(0, 20);
-
+    // Build scored lists for symptoms and risk factors using presence in
+    // Wikidata (wd) and WikiDoc (doc). This produces deterministic scores
+    // that the client can visualise instead of random widths.
     const prevention = Array.isArray(doc?.prevention) ? doc!.prevention : [];
+
+    const buildScoreList = (wdArr: any[], docArr: any[]) => {
+      const map = new Map<string, { wd: boolean; doc: boolean }>();
+      for (const s of Array.isArray(wdArr) ? wdArr : []) {
+        const key = (s ?? '').toString();
+        if (!key) continue;
+        const cur = map.get(key) ?? { wd: false, doc: false };
+        cur.wd = true;
+        map.set(key, cur);
+      }
+      for (const s of Array.isArray(docArr) ? docArr : []) {
+        const key = (s ?? '').toString();
+        if (!key) continue;
+        const cur = map.get(key) ?? { wd: false, doc: false };
+        cur.doc = true;
+        map.set(key, cur);
+      }
+
+      const list = Array.from(map.entries()).map(([label, f]) => ({
+        label,
+        rawScore: (f.wd ? 0.6 : 0) + (f.doc ? 0.4 : 0),
+      }));
+
+      // normalize to 0..100 and clamp sensible min/max so bars are visible
+      const maxRaw = list.reduce((m, it) => Math.max(m, it.rawScore), 0) || 1;
+      return list
+        .map((it) => ({
+          label: it.label,
+          score: Math.round((it.rawScore / maxRaw) * 100),
+        }))
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 20);
+    };
+
+    const symptoms = buildScoreList(wd?.symptoms ?? [], doc?.symptoms ?? []);
+    const riskFactors = buildScoreList(
+      wd?.riskFactors ?? [],
+      doc?.riskFactors ?? [],
+    );
+
+    // Compute lightweight indicators derived from available data so
+    // the frontend has consistent values to show in prevalence bars.
+    const symptomsCount = Array.isArray(symptoms) ? symptoms.length : 0;
+    const riskCount = Array.isArray(riskFactors) ? riskFactors.length : 0;
+    const bodyCount = Array.isArray(wd?.bodySystems)
+      ? wd.bodySystems.length
+      : 0;
+
+    const clamp = (v: number, a = 0, b = 100) => Math.max(a, Math.min(b, v));
+
+    const indicators = [
+      {
+        label: 'Prevalence',
+        value: clamp(
+          20 + symptomsCount * 3 + riskCount * 1 + bodyCount * 4,
+          5,
+          95,
+        ),
+      },
+      {
+        label: 'Severity',
+        value: clamp(
+          30 +
+            bodyCount * 12 +
+            (wd?.description
+              ? Math.min(20, (wd.description.length / 200) | 0)
+              : 0),
+          5,
+          95,
+        ),
+      },
+      {
+        label: 'Impact',
+        value: clamp(25 + symptomsCount * 4 + riskCount * 2, 5, 95),
+      },
+      {
+        label: 'Treatment Options',
+        value: clamp(prevention.length ? 70 : 35, 5, 95),
+      },
+    ];
 
     const out = {
       id: qid,
@@ -87,11 +156,20 @@ export class ConditionsService {
       description: wd?.description ?? null,
       sections: {
         overview,
-        symptoms,
-        riskFactors,
+        // Keep legacy arrays for compatibility
+        symptoms: (Array.isArray(wd?.symptoms) ? wd.symptoms : [])
+          .concat(Array.isArray(doc?.symptoms) ? doc.symptoms : [])
+          .slice(0, 20),
+        riskFactors: (Array.isArray(wd?.riskFactors) ? wd.riskFactors : [])
+          .concat(Array.isArray(doc?.riskFactors) ? doc.riskFactors : [])
+          .slice(0, 20),
         prevention,
+        // New scored lists
+        symptomsScores: symptoms,
+        riskFactorsScores: riskFactors,
       },
       bodySystems: Array.isArray(wd?.bodySystems) ? wd.bodySystems : [],
+      indicators,
       sources: [
         { name: 'Wikidata', url: `https://www.wikidata.org/wiki/${qid}` },
         { name: 'WikiDoc', url: wikidocUrl },
@@ -133,7 +211,7 @@ export class ConditionsService {
     };
   }
 
-  async getGeoContext(id: string, country: string) {
+  async getGeo(id: string, country: string) {
     const qid = (id ?? '').trim();
     if (!WD_ID_RE.test(qid)) {
       throw new BadRequestException(
@@ -141,22 +219,62 @@ export class ConditionsService {
       );
     }
 
-    const c = (country ?? '').trim().toUpperCase();
-    if (!c) throw new BadRequestException('country is required, e.g. RO');
+    const iso = (country ?? '').toString().trim().toUpperCase();
+    if (!/^[A-Z]{2}$/.test(iso)) {
+      throw new BadRequestException(
+        'Invalid country code. Use ISO alpha-2, e.g. RO',
+      );
+    }
 
-    // MVP proxy response (stable shape)
+    // Fetch condition overview (includes our indicators) and country stats in parallel
+    const [cond, countryStats] = await Promise.all([
+      this.getCondition(qid).catch(() => null),
+      this.wikidata.getCountryStats(iso).catch(() => null),
+    ]);
+
+    const indicators =
+      cond && Array.isArray((cond as any).indicators)
+        ? (cond as any).indicators
+        : [];
+
+    const population = countryStats?.population ?? null;
+    const area = countryStats?.areaKm2 ?? null;
+    const density = population && area ? population / Math.max(1, area) : null; // people per km2
+
+    // Build a conservative estimator using prevalence indicator and population density
+    const prevalenceIndicator =
+      indicators?.find((i: any) => i.label === 'Prevalence')?.value ?? 30;
+
+    // densityMultiplier: low density -> lower multiplier; high density -> higher
+    let densityMultiplier = 1;
+    if (typeof density === 'number') {
+      // log scale: density 1 -> 0, 10 -> 1, 100 -> 2, etc.
+      densityMultiplier = 1 + Math.log10(density + 1) * 0.25; // moderate effect
+      densityMultiplier = Math.max(0.5, Math.min(2.5, densityMultiplier));
+    }
+
+    const estimatedPrevalencePerc = Math.round(
+      Math.max(1, Math.min(95, prevalenceIndicator * densityMultiplier)),
+    );
+
+    const confidence =
+      (Array.isArray((cond as any)?.sections?.symptoms) ? 1 : 0) +
+      (Array.isArray((cond as any)?.sections?.riskFactors) ? 1 : 0) +
+      (population ? 1 : 0);
+
     return {
       id: qid,
-      country: c,
-      value: 0.6,
-      valueLabel: 'Estimated risk context (proxy)',
-      factors: [
-        'Climate',
-        'Population density',
-        'Industrial exposure',
-        'Lifestyle/diet',
-      ],
-      sources: [{ name: 'Educational proxy', url: null }],
+      country: iso,
+      countryLabel: countryStats?.label ?? null,
+      population: population ?? null,
+      areaKm2: area ?? null,
+      density: density ?? null,
+      estimatedPrevalencePercent: estimatedPrevalencePerc,
+      confidence: Math.min(3, confidence), // rough 0-3 scale
+      components: {
+        prevalenceIndicator,
+        densityMultiplier: Number(densityMultiplier.toFixed(3)),
+      },
     };
   }
 

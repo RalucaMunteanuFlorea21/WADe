@@ -1,23 +1,28 @@
 <div class="container">
-  <h1>HealthScope</h1>
-  <p class="muted" style="margin-bottom: 32px;">Explore medical conditions, symptoms, and geographical health factors</p>
+  <div class="hero">
+    <div class="hero-content">
+      <h1>HealthScope</h1>
+      <p class="muted subtitle">Explore medical conditions, symptoms, and geographical health factors</p>
 
-  <form class="row" (ngSubmit)="doSearch()">
-    <input 
-      name="q" 
-      [(ngModel)]="q" 
-      placeholder="Search (e.g., asthma, hypertension, diabetes)" 
-      autocomplete="off"
-      [disabled]="loading"
-    />
-    <button type="submit" [disabled]="loading">
-      <span *ngIf="!loading">Search</span>
-      <span *ngIf="loading">
-        <span class="spinner"></span>
-        Searching...
-      </span>
-    </button>
-  </form>
+      <form class="search-row" (ngSubmit)="doSearch()">
+        <input
+          class="search-input"
+          name="q"
+          [(ngModel)]="q"
+          placeholder="Search (e.g., asthma, hypertension, diabetes)"
+          autocomplete="off"
+          [disabled]="loading"
+        />
+        <button type="submit" class="search-button" [disabled]="loading">
+          <span *ngIf="!loading">Search</span>
+          <span *ngIf="loading">
+            <span class="spinner"></span>
+            Searching...
+          </span>
+        </button>
+      </form>
+    </div>
+  </div>
 
   <div *ngIf="error" class="error">
     {{ error }}
@@ -39,9 +44,9 @@
   </div>
 
   <!-- Empty state -->
-  <div *ngIf="!results.length && !loading && q.length >= 2" style="text-align: center; margin-top: 48px; animation: fadeIn 0.4s ease-out;">
-    <p class="muted">No results found for "{{ q }}"</p>
-    <p class="muted small">Try a different search term</p>
+  <div *ngIf="!results.length && !loading && lastQuery.length >= 2" style="text-align: center; margin-top: 48px; animation: fadeIn 0.4s ease-out;">
+    <p class="muted">No results found for "{{ lastQuery }}"</p>
+    <p class="muted small">Try different wording, check spelling, or broaden your search</p>
   </div>
 
   <!-- Initial state hint -->
