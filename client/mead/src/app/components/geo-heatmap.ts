@@ -3,7 +3,7 @@ import { CommonModule } from '@angular/common';
 
 // Import Leaflet and CSS so the global `L` is available at runtime
 import * as L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
+// import 'leaflet/dist/leaflet.css';
 
 interface CountryData {
   name: string;
