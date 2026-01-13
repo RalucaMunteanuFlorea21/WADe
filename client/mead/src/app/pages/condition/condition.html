@@ -102,7 +102,15 @@
       </p>
 
       <!-- Learning Quiz -->
-      <app-learning-quiz [conditionName]="data?.name || ''"></app-learning-quiz>
+      <app-learning-quiz
+  [conditionName]="data?.name || ''"
+  [quizData]="{
+    symptoms: data?.sections?.symptoms,
+    riskFactors: data?.sections?.riskFactors,
+    prevention: data?.sections?.prevention
+  }"
+></app-learning-quiz>
+
     </section>
 
     <!-- BODY SYSTEMS TAB -->
