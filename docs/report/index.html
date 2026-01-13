@@ -654,6 +654,50 @@ LIMIT 1</code></pre>
       rendered as clickable references.
     </p>
 
+    <h4>8.2.1 Angular Client: concrete usage</h4>
+    <p>
+      The client implementation is located in the `client/mead` folder. The primary service that wraps the HTTP API is
+      <code>ConditionsApiService</code> at
+      <a href="client/mead/src/app/services/conditions-api.service.ts">client/mead/src/app/services/conditions-api.service.ts</a>.
+      It exposes three convenience methods that map directly to the backend endpoints:
+    </p>
+    <ul>
+      <li><code>search(q: string)</code> &rarr; GET <code>/api/conditions/search?q=&lt;q&gt;</code></li>
+      <li><code>getCondition(id: string)</code> &rarr; GET <code>/api/conditions/{id}</code></li>
+      <li><code>getGeo(id: string, country: string)</code> &rarr; GET <code>/api/conditions/{id}/geo?country=&lt;ISO2&gt;</code></li>
+    </ul>
+
+    <p>Example patterns used by components (conceptual TypeScript):</p>
+    <pre><code class="language-ts">// Home/search component (conceptual)
+this.loading = true;
+this.conditionsApi.search(query).subscribe(items => {
+  this.loading = false;
+  this.results = items; // each item: { id, label, description }
+}, () =&gt; { this.loading = false; });
+
+// Condition details component (conceptual)
+this.loading = true;
+this.conditionsApi.getCondition(qid).subscribe(condition => {
+  this.loading = false;
+  this.condition = condition; // normalized payload directly usable by templates
+});
+
+// Optional geo call (e.g., when user opens Geo tab)
+this.conditionsApi.getGeo(qid, 'RO').subscribe(geo => this.geo = geo);
+    </code></pre>
+
+    <p>
+      Notes:
+    </p>
+    <ul>
+      <li>The Angular service uses the `environment.apiBaseUrl` (see
+        <a href="client/mead/src/environments/environment.ts">client/mead/src/environments/environment.ts</a>) to build absolute URLs.
+      </li>
+      <li>The client expects the backend to return a stable JSON shape: arrays for lists and explicit `null` for absent
+        narrative fields like `sections.overview`.</li>
+      <li>Components should guard rendering with loading flags and show friendly messages for empty lists.</li>
+    </ul>
+
     <h3>8.3 Caching and Performance</h3>
     <p>
       Open knowledge endpoints can be rate-limited or slow. HealthScope supports caching in source clients, especially

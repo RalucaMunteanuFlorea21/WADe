@@ -79,6 +79,51 @@ Home/Search Page
 - calls /api/conditions/{id}
 - shows tabs: overview / symptoms / risk factors / prevention / body systems / geography (proxy)
 
+#### Frontend Implementation Details
+
+The Angular frontend is implemented as a small SPA that directly consumes the REST API exposed by the NestJS
+backend. Key client-side artifacts and how they map to API calls are listed below:
+
+- Service: [client/mead/src/app/services/conditions-api.service.ts](client/mead/src/app/services/conditions-api.service.ts)
+  - Exposes `search(q)`, `getCondition(id)` and `getGeo(id, country)`; it uses `environment.apiBaseUrl` as the HTTP
+    base and appends the backend path (e.g. `/api/conditions/search`). The service adds a cache-busting `_t` query
+    parameter during development to avoid aggressive browser caching.
+- Environment: [client/mead/src/environments/environment.ts](client/mead/src/environments/environment.ts)
+  - Contains `apiBaseUrl` (defaults to `http://localhost:3000` for local development).
+- Pages / Components:
+  - Search / Home: [client/mead/src/app/pages/home/home.ts](client/mead/src/app/pages/home/home.ts) — captures user input and
+    calls `ConditionsApiService.search(q)` to retrieve `ConditionSearchItem[]` results. Results are rendered with
+    clickable links that navigate to the details route using the returned Q-ID.
+  - Condition details: [client/mead/src/app/pages/condition/condition.ts](client/mead/src/app/pages/condition/condition.ts) — on
+    route activation it calls `ConditionsApiService.getCondition(id)` to obtain the normalized `Condition` object. It
+    may also call `getGeo(id, country)` when a geo view is requested.
+
+Example (conceptual) usage in a component:
+
+```ts
+// home.ts (conceptual)
+this.conditionsApi.search(query).subscribe(items => {
+  this.results = items; // each item: {id, label, description}
+});
+
+// condition.ts (conceptual)
+this.conditionsApi.getCondition(qid).subscribe(condition => {
+  this.condition = condition; // normalized payload directly renderable in the UI
+});
+
+this.conditionsApi.getGeo(qid, 'RO').subscribe(geo => {
+  this.geo = geo; // proxy geo context shown in a map or panel
+});
+```
+
+UI notes relevant to the API contract:
+
+- The client expects arrays to always be arrays (even if empty) and nullable narrative fields (overview) to be `null` when
+  absent; the UI shows a friendly “No data available yet” message for empty sections.
+- The server returns `sources` with `name` and `url`; the UI renders these as clickable links when `url` is present.
+- For development, the service appends a `_t` timestamp query parameter to avoid cache interference. In production, the
+  API base URL is set in `environment.ts` and CORS should be configured accordingly on the server.
+
 #### Backend (NestJS)
 - ConditionsController
 - REST endpoints under /api/conditions
